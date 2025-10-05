@@ -2,38 +2,90 @@
 #include <WebServer.h>
 #include <DHT.h>
 
-// Configurações do Wi-Fi
-const char* ssid = "GERMANE_GSM-2.4G";
-const char* senha = "24012004";
-
-// Configurações do DHT11
 #define PINO_DHT 4
 #define TIPO_DHT DHT11
 DHT dht(PINO_DHT, TIPO_DHT);
 
-// Servidor web
-WebServer servidor(80);
+WebServer portalServer(80);
+WebServer mainServer(80);
 
-// Variáveis de leitura
 float temperaturaAtual = 0;
 float umidadeAtual = 0;
 
-// Função para medir o sensor
+bool finalizeRequested = false;
+bool mainServerStarted = false;
+
+String savedSSID, savedPass;
+
+// Controle de tempo para leituras do DHT
+unsigned long ultimaMedicao = 0;
+const unsigned long intervaloMedicao = 5000; // 5 segundos
+
+// ------------------- Funções -------------------
+
+// Leitura do sensor (não bloqueante)
 void medirSensor() {
-    float t = dht.readTemperature();
-    float u = dht.readHumidity();
-    if (!isnan(t) && !isnan(u)) {
-        temperaturaAtual = t;
-        umidadeAtual = u;
-        Serial.printf("Temperatura: %.1f°C, Umidade: %.1f%%\n", t, u);
-    } else {
-        Serial.println("Falha ao ler o DHT11.");
+    unsigned long agora = millis();
+    if (agora - ultimaMedicao >= intervaloMedicao) {
+        ultimaMedicao = agora;
+        float t = dht.readTemperature();
+        float u = dht.readHumidity();
+        temperaturaAtual = isnan(t) ? 0 : t;
+        umidadeAtual = isnan(u) ? 0 : u;
+        Serial.printf("Temperatura: %.1f°C, Umidade: %.1f%%\n", temperaturaAtual, umidadeAtual);
     }
 }
 
-// Página HTML
-void tratarRaiz() {
-    String html = R"rawliteral(
+// ------------------- Páginas HTML -------------------
+
+const char* paginaConfig = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Configurar WiFi</title>
+<style>body{font-family:Arial;padding:12px}</style></head>
+<body>
+<h1>Configurar WiFi</h1>
+<form action="/salvar" method="POST">
+SSID:<br><input type="text" name="ssid" required><br>
+Senha:<br><input type="password" name="senha"><br><br>
+<input type="submit" value="Conectar">
+</form>
+<p>Aguarde a verificação; a página mostrará quando conectado.</p>
+</body></html>
+)rawliteral";
+
+String paginaConectando() {
+    return R"rawliteral(
+<!DOCTYPE html>
+<html><head><meta charset='utf-8'><title>Conectando...</title></head><body>
+<h1>Tentando conectar...</h1><p id='status'>Aguardando...</p>
+<script>
+function check(){
+fetch('/status').then(r=>r.json()).then(j=>{
+  if(j.connected){
+    document.getElementById('status').innerHTML='Conectado! IP:'+j.ip;
+    if(!document.getElementById('finalizarBtn')){
+      let btn=document.createElement('button');
+      btn.id='finalizarBtn';
+      btn.innerText='Desativar AP e abrir interface principal';
+      btn.onclick=function(){
+        fetch('/finalize',{method:'POST'}).then(()=>{
+          document.getElementById('status').innerHTML+='<br>Pedido enviado';
+          setTimeout(()=>{window.location='http://'+j.ip;},4000);
+        });
+      };
+      document.body.appendChild(btn);
+    }
+  }else document.getElementById('status').innerHTML='Ainda não conectado...';
+}).catch(e=>document.getElementById('status').innerHTML='Erro');}
+setInterval(check,1000); check();
+</script>
+</body></html>
+)rawliteral";
+}
+
+// Página principal (HTML completo com cadastro e DHT)
+String paginaPrincipalHTML = R"rawliteral(
 <!DOCTYPE html>
 <html lang='pt-BR'>
 <head>
@@ -126,33 +178,74 @@ atualizarDados();
 </html>
 )rawliteral";
 
-    servidor.send(200, "text/html", html);
+// ------------------- Handlers -------------------
+void handlePortalRoot() { portalServer.send(200,"text/html",paginaConfig); }
+
+void handleSalvar() {
+    savedSSID = portalServer.arg("ssid");
+    savedPass = portalServer.arg("senha");
+    Serial.println("Credenciais: "+savedSSID);
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.begin(savedSSID.c_str(), savedPass.c_str());
+    portalServer.send(200,"text/html",paginaConectando());
 }
 
-// Endpoint JSON
-void tratarDados() {
-    String json = "{\"temperatura\":" + String(temperaturaAtual) +
-                  ",\"umidade\":" + String(umidadeAtual) + "}";
-    servidor.send(200, "application/json", json);
+void handleStatus() {
+    String json="{\"connected\":";
+    if(WiFi.status()==WL_CONNECTED){ json+="true,\"ip\":\""+WiFi.localIP().toString()+"\""; }
+    else json+="false";
+    json+="}";
+    portalServer.send(200,"application/json",json);
 }
 
+void handleFinalize() { portalServer.send(200,"text/plain","OK"); finalizeRequested=true; }
+
+void handleMainRoot() { mainServer.send(200,"text/html",paginaPrincipalHTML); }
+
+void handleDados() {
+    String json="{\"temperatura\":"+String(temperaturaAtual)+",\"umidade\":"+String(umidadeAtual)+"}";
+    mainServer.send(200,"application/json",json);
+}
+
+void handleCadastrar() {
+    String p = mainServer.arg("produto");
+    mainServer.send(200,"text/html","<p>Produto cadastrado: "+p+"</p><a href='/'>Voltar</a>");
+}
+
+// ------------------- Setup -------------------
 void setup() {
     Serial.begin(115200);
     dht.begin();
 
-    WiFi.begin(ssid, senha);
-    Serial.println("Conectando ao Wi-Fi...");
-    while (WiFi.status() != WL_CONNECTED) { delay(1000); Serial.print("."); }
-    Serial.printf("\nWi-Fi conectado! IP: %s\n", WiFi.localIP().toString().c_str());
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("ESP32_Config","12345678");
+    Serial.println("AP iniciado, IP: "+WiFi.softAPIP().toString());
 
-    servidor.on("/", tratarRaiz);
-    servidor.on("/dados", tratarDados);
-    servidor.begin();
-    Serial.println("Servidor iniciado!");
+    portalServer.on("/",HTTP_GET,handlePortalRoot);
+    portalServer.on("/salvar",HTTP_POST,handleSalvar);
+    portalServer.on("/status",HTTP_GET,handleStatus);
+    portalServer.on("/finalize",HTTP_POST,handleFinalize);
+    portalServer.begin();
+    Serial.println("Portal rodando");
 }
 
+// ------------------- Loop -------------------
 void loop() {
-    servidor.handleClient();
+    portalServer.handleClient();
     medirSensor();
-    delay(5000);
+
+    if(finalizeRequested && !mainServerStarted){
+        Serial.println("Finalizando AP e iniciando servidor principal...");
+        portalServer.stop();
+        WiFi.softAPdisconnect(true); delay(300);
+        mainServer.on("/",HTTP_GET,handleMainRoot);
+        mainServer.on("/dados",HTTP_GET,handleDados);
+        mainServer.on("/cadastrar",HTTP_POST,handleCadastrar);
+        mainServer.begin();
+        mainServerStarted=true;
+        finalizeRequested=false;
+        Serial.println("Servidor principal iniciado. IP: "+WiFi.localIP().toString());
+    }
+
+    if(mainServerStarted) mainServer.handleClient();
 }
