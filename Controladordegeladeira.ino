@@ -10,7 +10,10 @@ WebServer portalServer(80);
 WebServer mainServer(80);
 
 float temperaturaAtual = 0;
+float temperaturaBuffer = 0;
 float umidadeAtual = 0;
+float umidadeBuffer = 0;
+int contadorMedicoes = 0;
 
 bool finalizeRequested = false;
 bool mainServerStarted = false;
@@ -30,9 +33,26 @@ void medirSensor() {
         ultimaMedicao = agora;
         float t = dht.readTemperature();
         float u = dht.readHumidity();
-        temperaturaAtual = isnan(t) ? 0 : t;
-        umidadeAtual = isnan(u) ? 0 : u;
-        Serial.printf("Temperatura: %.1f°C, Umidade: %.1f%%\n", temperaturaAtual, umidadeAtual);
+        
+        // Se leitura inválida, ignora e sai
+        if (isnan(t) || isnan(u)) return;
+
+        temperaturaBuffer += t;
+        umidadeBuffer += u;
+        contadorMedicoes++;
+
+        // Quando atingir 10 medições, calcula média e envia
+        if (contadorMedicoes >= 10) {
+            temperaturaAtual = temperaturaBuffer / contadorMedicoes;
+            umidadeAtual = umidadeBuffer / contadorMedicoes;
+            
+            Serial.printf("Média das últimas 10 medições:\nTemperatura: %.1f°C, Umidade: %.1f%%\n",
+                          temperaturaAtual, umidadeAtual);
+
+            temperaturaBuffer = 0;
+            umidadeBuffer = 0;
+            contadorMedicoes = 0;
+        }
     }
 }
 
