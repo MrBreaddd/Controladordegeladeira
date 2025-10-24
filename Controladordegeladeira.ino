@@ -2,6 +2,7 @@
 #include <WebServer.h>
 #include <DHT.h>
 #include <HTTPClient.h>
+#include "time.h"
 
 #define PINO_DHT 4
 #define TIPO_DHT DHT11
@@ -347,6 +348,7 @@ void handleCadastrar() {
 // ------------------- Setup -------------------
 void setup() {
     Serial.begin(115200);
+
     dht.begin();
 
     WiFi.mode(WIFI_AP);
@@ -369,7 +371,18 @@ void loop() {
     if(finalizeRequested && !mainServerStarted){
         Serial.println("Finalizando AP e iniciando servidor principal...");
         portalServer.stop();
-        WiFi.softAPdisconnect(true); delay(300);
+        WiFi.softAPdisconnect(true);
+        delay(300);
+
+      configTime(-3 * 3600, 0, "pool.ntp.org");
+      Serial.println("Aguardando sincronização...");
+      struct tm timeinfo;
+      while (!getLocalTime(&timeinfo)) {
+        delay(500);
+        Serial.print(".");
+      }
+      Serial.println("\nHora sincronizada!");
+
         mainServer.on("/",HTTP_GET,handleMainRoot);
         mainServer.on("/dados",HTTP_GET,handleDados);
         mainServer.on("/cadastrar",HTTP_POST,handleCadastrar);
@@ -379,5 +392,15 @@ void loop() {
         Serial.println("Servidor principal iniciado. IP: "+WiFi.localIP().toString());
     }
 
-    if(mainServerStarted) mainServer.handleClient();
+    if(mainServerStarted){ mainServer.handleClient();
+
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo)) {
+        char buf[32];
+        strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+        Serial.println(buf);
+      } else {
+        Serial.println("Hora ainda não disponível...");
+      }
+  }
 }
