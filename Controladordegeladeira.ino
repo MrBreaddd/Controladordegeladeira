@@ -97,17 +97,93 @@ void medirSensor() {
 const char* paginaConfig = R"rawliteral(
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Configurar WiFi</title>
-<style>body{font-family:Arial;padding:12px}</style></head>
+<head>
+<meta charset="utf-8">
+<title>Configurar WiFi</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #f3f4f6;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+  }
+
+  .container {
+    background-color: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 30px 40px;
+    text-align: center;
+    width: 90%;
+    max-width: 400px;
+  }
+
+  h1 {
+    font-size: 28px;
+    margin-bottom: 20px;
+    color: #333333;
+  }
+
+  label {
+    font-size: 20px;
+    display: block;
+    text-align: left;
+    margin-bottom: 8px;
+    color: #444444;
+  }
+
+  input[type="text"],
+  input[type="password"] {
+    font-size: 18px;
+    padding: 10px;
+    width: 100%;
+    border: 2px solid #ccc;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+  }
+
+  input[type="submit"] {
+    font-size: 20px;
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+
+  input[type="submit"]:hover {
+    background-color: #45a049;
+  }
+
+  p {
+    font-size: 18px;
+    margin-top: 20px;
+    color: #555555;
+  }
+</style>
+</head>
 <body>
-<h1>Configurar WiFi</h1>
-<form action="/salvar" method="POST">
-SSID:<br><input type="text" name="ssid" required><br>
-Senha:<br><input type="password" name="senha"><br><br>
-<input type="submit" value="Conectar">
-</form>
-<p>Aguarde a verificação; a página mostrará quando conectado.</p>
-</body></html>
+  <div class="container">
+    <h1>Configurar WiFi</h1>
+    <form action="/salvar" method="POST">
+      <label for="ssid">SSID:</label>
+      <input type="text" id="ssid" name="ssid" required>
+
+      <label for="senha">Senha:</label>
+      <input type="password" id="senha" name="senha">
+
+      <input type="submit" value="Conectar">
+    </form>
+    <p>Aguarde a verificação; a página mostrará quando conectado.</p>
+  </div>
+</body>
+</html>
 )rawliteral";
 
 String paginaConectando() {
