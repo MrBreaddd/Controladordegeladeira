@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DHT.h>
+#include <HTTPClient.h>
 
 #define PINO_DHT 4
 #define TIPO_DHT DHT11
@@ -18,6 +19,8 @@ int contadorMedicoes = 0;
 bool finalizeRequested = false;
 bool mainServerStarted = false;
 
+const char* scriptUrl = "https://script.google.com/macros/s/AKfycbycH9JWNKUv2TVZgx8j0zgyZLc3TOwMNK0m83Wou3kynhcBDM2ULSh7Hs1Ne-hTSSvI/exec";
+
 String savedSSID, savedPass;
 
 // Controle de tempo para leituras do DHT
@@ -25,6 +28,38 @@ unsigned long ultimaMedicao = 0;
 const unsigned long intervaloMedicao = 5000; // 5 segundos
 
 // ------------------- Funções -------------------
+
+void enviarDados() {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+
+    String url = String(scriptUrl) +
+                 "?temperatura=" + String(temperaturaAtual) +
+                 "&umidade=" + String(umidadeAtual);
+
+    http.begin(url);
+    int httpResponseCode = http.GET();
+
+    Serial.print("Código HTTP: ");
+    Serial.println(httpResponseCode);
+
+    String resposta = http.getString();
+    Serial.print("Resposta do servidor: ");
+    Serial.println(resposta);
+
+
+    if (httpResponseCode > 0) {
+      Serial.println("Dados enviados com sucesso!");
+    } else {
+      Serial.print("Erro ao enviar dados: ");
+      Serial.println(httpResponseCode);
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi desconectado, não foi possível enviar os dados.");
+  }
+}
 
 // Leitura do sensor (não bloqueante)
 void medirSensor() {
@@ -42,12 +77,13 @@ void medirSensor() {
         contadorMedicoes++;
 
         // Quando atingir 10 medições, calcula média e envia
-        if (contadorMedicoes >= 10) {
+        if (contadorMedicoes >= 12) {
             temperaturaAtual = temperaturaBuffer / contadorMedicoes;
             umidadeAtual = umidadeBuffer / contadorMedicoes;
             
             Serial.printf("Média das últimas 10 medições:\nTemperatura: %.1f°C, Umidade: %.1f%%\n",
                           temperaturaAtual, umidadeAtual);
+            enviarDados();
 
             temperaturaBuffer = 0;
             umidadeBuffer = 0;
