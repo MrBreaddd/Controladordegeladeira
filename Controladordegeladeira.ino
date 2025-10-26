@@ -245,7 +245,7 @@ th{background:#28a745;color:#fff;}
 </style>
 </head>
 <body>
-<h1>Plataforma ESP32</h1>
+<h1>Monitor</h1>
 <div class='tab-buttons'>
 <button id='btnCadastro' class='active' onclick="showTab('cadastro')">Cadastro</button>
 <button id='btnDht' onclick="showTab('dht')">Medição DHT11</button>
@@ -287,8 +287,8 @@ th{background:#28a745;color:#fff;}
 </div>
 
 <script>
-// Valor recebido do ESP32
-let buf = %BUF%; // Substituído dinamicamente no C++ antes de enviar a página
+// Valor coletado pelo ESP32 e substituido antes do envio
+let buf = %BUF%; 
 
 function showTab(tab){
   document.getElementById('cadastro').style.display=(tab==='cadastro')?'block':'none';
@@ -304,6 +304,7 @@ form.addEventListener('submit', e=>{
   const nome=document.getElementById('nome').value.trim();
   const categoria=document.getElementById('categoria').value;
   const quantidade=document.getElementById('quantidade').value;
+
   if(nome && categoria && quantidade){
     const linha=document.createElement('tr');
     linha.innerHTML=`
@@ -314,8 +315,45 @@ form.addEventListener('submit', e=>{
       <td></td>`;
     tabela.appendChild(linha);
     form.reset();
+
+    // ENVIA PARA O GOOGLE SHEETS
+    const url = "https://script.google.com/macros/s/AKfycbxv79NLoQlrEipNvVJDHV9CDwgbW_phkzKWxYP_-6T2HgjR4IzCkkZPT8LYGYvoUpgE/exec" +
+      `?dataHora=${encodeURIComponent(buf)}` +
+      `&nome=${encodeURIComponent(nome)}` +
+      `&categoria=${encodeURIComponent(categoria)}` +
+      `&quantidade=${encodeURIComponent(quantidade)}` +
+      `&validade=`;
+    fetch(url)
+      .then(r => r.text())
+      .then(txt => console.log("Resposta do Google:", txt))
+      .catch(err => console.error("Erro ao enviar:", err));
   }
 });
+
+const scriptURL = "https://script.google.com/macros/s/SEU_SCRIPT_ID/exec";
+
+function carregarDadosGoogle() {
+  fetch(scriptURL + "?acao=listar")
+    .then(response => response.json())
+    .then(dados => {
+      const tabela = document.querySelector("#tabela-alimentos tbody");
+      tabela.innerHTML = ""; // limpa tabela atual
+
+      dados.forEach(item => {
+        const linha = document.createElement("tr");
+        linha.innerHTML = `
+          <td>${item["Nome"] || ""}</td>
+          <td>${item["Categoria"] || ""}</td>
+          <td>${item["Quantidade"] || ""}</td>
+        `;
+        tabela.appendChild(linha);
+      });
+    })
+    .catch(err => console.error("Erro ao carregar dados:", err));
+}
+
+// Chama a função ao iniciar
+window.addEventListener("load", carregarDadosGoogle);
 
 function atualizarDados(){
   fetch('/dados').then(r=>r.json()).then(data=>{
@@ -330,7 +368,7 @@ atualizarDados();
 </html>
 )rawliteral";
 
-// ------------------- Handlers -------------------
+// ------------------- Handlers ------------------- //
 void handlePortalRoot() { portalServer.send(200,"text/html",paginaConfig); }
 
 void handleSalvar() {
