@@ -232,7 +232,7 @@ h1{text-align:center;color:#333;}
 .tab-buttons button{padding:10px 20px;margin:5px;border:none;border-radius:5px;
 background:#28a745;color:#fff;font-weight:bold;cursor:pointer;}
 .tab-buttons button.active{background:#218838;}
-.tab{display:none;max-width:600px;background:#fff;padding:20px;margin:0 auto;
+.tab{display:none;max-width:700px;background:#fff;padding:20px;margin:0 auto;
 border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,0.1);}
 label{font-weight:bold;display:block;margin-top:10px;}
 input,select,button[type=submit]{width:100%;padding:8px;margin-top:5px;
@@ -265,9 +265,19 @@ th{background:#28a745;color:#fff;}
 <input type='number' id='quantidade' min='1' required>
 <button type='submit'>Cadastrar</button>
 </form>
-<table id='tabela-alimentos'><thead><tr>
-<th>Nome</th><th>Categoria</th><th>Quantidade</th>
-</tr></thead><tbody></tbody></table>
+
+<table id='tabela-alimentos'>
+<thead>
+<tr>
+<th>Data e Hora</th>
+<th>Nome</th>
+<th>Categoria</th>
+<th>Quantidade</th>
+<th>Validade</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 </div>
 
 <div id='dht' class='tab'>
@@ -277,32 +287,41 @@ th{background:#28a745;color:#fff;}
 </div>
 
 <script>
+// Valor recebido do ESP32
+let buf = %BUF%; // Substituído dinamicamente no C++ antes de enviar a página
+
 function showTab(tab){
-document.getElementById('cadastro').style.display=(tab==='cadastro')?'block':'none';
-document.getElementById('dht').style.display=(tab==='dht')?'block':'none';
-document.getElementById('btnCadastro').classList.toggle('active',tab==='cadastro');
-document.getElementById('btnDht').classList.toggle('active',tab==='dht');
+  document.getElementById('cadastro').style.display=(tab==='cadastro')?'block':'none';
+  document.getElementById('dht').style.display=(tab==='dht')?'block':'none';
+  document.getElementById('btnCadastro').classList.toggle('active',tab==='cadastro');
+  document.getElementById('btnDht').classList.toggle('active',tab==='dht');
 }
 
 const form=document.getElementById('form-alimento');
 const tabela=document.querySelector('#tabela-alimentos tbody');
 form.addEventListener('submit', e=>{
-e.preventDefault();
-const nome=document.getElementById('nome').value.trim();
-const categoria=document.getElementById('categoria').value;
-const quantidade=document.getElementById('quantidade').value;
-if(nome && categoria && quantidade){
-const linha=document.createElement('tr');
-linha.innerHTML=`<td>${nome}</td><td>${categoria}</td><td>${quantidade}</td>`;
-tabela.appendChild(linha);
-form.reset();
-}});
+  e.preventDefault();
+  const nome=document.getElementById('nome').value.trim();
+  const categoria=document.getElementById('categoria').value;
+  const quantidade=document.getElementById('quantidade').value;
+  if(nome && categoria && quantidade){
+    const linha=document.createElement('tr');
+    linha.innerHTML=`
+      <td>${buf}</td>
+      <td>${nome}</td>
+      <td>${categoria}</td>
+      <td>${quantidade}</td>
+      <td></td>`;
+    tabela.appendChild(linha);
+    form.reset();
+  }
+});
 
 function atualizarDados(){
-fetch('/dados').then(r=>r.json()).then(data=>{
-document.getElementById('temperatura').innerHTML=data.temperatura+' &#8451;';
-document.getElementById('umidade').innerHTML=data.umidade+' %';
-});
+  fetch('/dados').then(r=>r.json()).then(data=>{
+    document.getElementById('temperatura').innerHTML=data.temperatura+' &#8451;';
+    document.getElementById('umidade').innerHTML=data.umidade+' %';
+  });
 }
 setInterval(atualizarDados,5000);
 atualizarDados();
@@ -333,7 +352,17 @@ void handleStatus() {
 
 void handleFinalize() { portalServer.send(200,"text/plain","OK"); finalizeRequested=true; }
 
-void handleMainRoot() { mainServer.send(200,"text/html",paginaPrincipalHTML); }
+void handleMainRoot() {
+  struct tm timeinfo;
+  char buf[32] = "";
+  if (getLocalTime(&timeinfo)) {
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+  }
+
+  String html = paginaPrincipalHTML;
+  html.replace("%BUF%", String("\"") + buf + "\""); // substitui marcador pelo valor real da hora
+  mainServer.send(200, "text/html", html);
+}
 
 void handleDados() {
     String json="{\"temperatura\":"+String(temperaturaAtual)+",\"umidade\":"+String(umidadeAtual)+"}";
@@ -393,14 +422,5 @@ void loop() {
     }
 
     if(mainServerStarted){ mainServer.handleClient();
-
-      struct tm timeinfo;
-      if (getLocalTime(&timeinfo)) {
-        char buf[32];
-        strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
-        Serial.println(buf);
-      } else {
-        Serial.println("Hora ainda não disponível...");
-      }
-  }
+    }
 }
