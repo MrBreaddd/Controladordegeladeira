@@ -28,7 +28,7 @@ String savedSSID, savedPass;
 unsigned long ultimaMedicao = 0;
 const unsigned long intervaloMedicao = 5000; // 5 segundos
 
-// ------------------- Funções -------------------
+// ------------------- Funções ------------------- //
 
 void enviarDados() {
   if (WiFi.status() == WL_CONNECTED) {
@@ -93,7 +93,7 @@ void medirSensor() {
     }
 }
 
-// ------------------- Páginas HTML -------------------
+// ------------------- Páginas HTML ------------------- //
 
 const char* paginaConfig = R"rawliteral(
 <!DOCTYPE html>
@@ -317,7 +317,7 @@ form.addEventListener('submit', e=>{
     form.reset();
 
     // ENVIA PARA O GOOGLE SHEETS
-    const url = "https://script.google.com/macros/s/AKfycbxv79NLoQlrEipNvVJDHV9CDwgbW_phkzKWxYP_-6T2HgjR4IzCkkZPT8LYGYvoUpgE/exec" +
+    const url = "https://script.google.com/macros/s/AKfycbzpzURO67wYObIRM8wfKXhfjHfnoXcMPjoo5fXh_uovGYbYeUA59KukNttuBu5DM5kp/exec" +
       `?dataHora=${encodeURIComponent(buf)}` +
       `&nome=${encodeURIComponent(nome)}` +
       `&categoria=${encodeURIComponent(categoria)}` +
@@ -330,7 +330,7 @@ form.addEventListener('submit', e=>{
   }
 });
 
-const scriptURL = "https://script.google.com/macros/s/SEU_SCRIPT_ID/exec";
+const scriptURL = "https://script.google.com/macros/s/AKfycbzpzURO67wYObIRM8wfKXhfjHfnoXcMPjoo5fXh_uovGYbYeUA59KukNttuBu5DM5kp/exec";
 
 function carregarDadosGoogle() {
   fetch(scriptURL + "?acao=listar")
@@ -342,9 +342,11 @@ function carregarDadosGoogle() {
       dados.forEach(item => {
         const linha = document.createElement("tr");
         linha.innerHTML = `
-          <td>${item["Nome"] || ""}</td>
-          <td>${item["Categoria"] || ""}</td>
-          <td>${item["Quantidade"] || ""}</td>
+        <td>${item["dataHora"] || ""}</td>
+        <td>${item["nome"] || ""}</td>
+        <td>${item["categoria"] || ""}</td>
+        <td>${item["quantidade"] || ""}</td>
+        <td>${item["validade"] || ""}</td>
         `;
         tabela.appendChild(linha);
       });
@@ -412,7 +414,7 @@ void handleCadastrar() {
     mainServer.send(200,"text/html","<p>Produto cadastrado: "+p+"</p><a href='/'>Voltar</a>");
 }
 
-// ------------------- Setup -------------------
+// ------------------- Setup ------------------- //
 void setup() {
     Serial.begin(115200);
 
@@ -430,7 +432,7 @@ void setup() {
     Serial.println("Portal rodando");
 }
 
-// ------------------- Loop -------------------
+// ------------------- Loop ------------------- //
 void loop() {
     portalServer.handleClient();
     medirSensor();
