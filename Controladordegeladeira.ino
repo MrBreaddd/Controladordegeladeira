@@ -20,7 +20,7 @@ int contadorMedicoes = 0;
 bool finalizeRequested = false;
 bool mainServerStarted = false;
 
-const char* scriptUrl = "https://script.google.com/macros/s/AKfycbycH9JWNKUv2TVZgx8j0zgyZLc3TOwMNK0m83Wou3kynhcBDM2ULSh7Hs1Ne-hTSSvI/exec";
+const char* scriptUrl = "https://script.google.com/macros/s/AKfycbycH9JWNKUv2TVZgx8j0zgyZLc3TOwMNK0m83Wou3kynhcBDM2ULSh7Hs1Ne-hTSSvI/exec"; //Script para temperatura
 
 String savedSSID, savedPass;
 
@@ -81,9 +81,9 @@ void medirSensor() {
         if (contadorMedicoes >= 12) {
             temperaturaAtual = temperaturaBuffer / contadorMedicoes;
             umidadeAtual = umidadeBuffer / contadorMedicoes;
-            
+            /*
             Serial.printf("Média das últimas 10 medições:\nTemperatura: %.1f°C, Umidade: %.1f%%\n",
-                          temperaturaAtual, umidadeAtual);
+                          temperaturaAtual, umidadeAtual);*/
             enviarDados();
 
             temperaturaBuffer = 0;
@@ -263,6 +263,8 @@ th{background:#28a745;color:#fff;}
 </select>
 <label>Quantidade:</label>
 <input type='number' id='quantidade' min='1' required>
+<label>Temperatura Limite:</label>
+<input type='text' id='templimit' required>
 <button type='submit'>Cadastrar</button>
 </form>
 
@@ -273,7 +275,7 @@ th{background:#28a745;color:#fff;}
 <th>Nome</th>
 <th>Categoria</th>
 <th>Quantidade</th>
-<th>Validade</th>
+<th>Monitoramento</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -317,12 +319,13 @@ form.addEventListener('submit', e=>{
     form.reset();
 
     // ENVIA PARA O GOOGLE SHEETS
-    const url = "https://script.google.com/macros/s/AKfycbzpzURO67wYObIRM8wfKXhfjHfnoXcMPjoo5fXh_uovGYbYeUA59KukNttuBu5DM5kp/exec" +
+    const url = "https://script.google.com/macros/s/AKfycbzGhVyDJNsVfDlK7P2MoR9VI5YYpExCU9-ckijQhMW9cX4x2pN-qhaTJ3mKKHQj0-06/exec" +
       `?dataHora=${encodeURIComponent(buf)}` +
       `&nome=${encodeURIComponent(nome)}` +
       `&categoria=${encodeURIComponent(categoria)}` +
       `&quantidade=${encodeURIComponent(quantidade)}` +
-      `&validade=`;
+      `&monitoramento=` +
+      `&templimit`;
     fetch(url)
       .then(r => r.text())
       .then(txt => console.log("Resposta do Google:", txt))
@@ -330,7 +333,7 @@ form.addEventListener('submit', e=>{
   }
 });
 
-const scriptURL = "https://script.google.com/macros/s/AKfycbzpzURO67wYObIRM8wfKXhfjHfnoXcMPjoo5fXh_uovGYbYeUA59KukNttuBu5DM5kp/exec";
+const scriptURL = "https://script.google.com/macros/s/AKfycbzGhVyDJNsVfDlK7P2MoR9VI5YYpExCU9-ckijQhMW9cX4x2pN-qhaTJ3mKKHQj0-06/exec";
 
 function carregarDadosGoogle() {
   fetch(scriptURL + "?acao=listar")
@@ -346,7 +349,8 @@ function carregarDadosGoogle() {
         <td>${item["nome"] || ""}</td>
         <td>${item["categoria"] || ""}</td>
         <td>${item["quantidade"] || ""}</td>
-        <td>${item["validade"] || ""}</td>
+        <td>${item["monitoramento"] || ""}</td>
+        <td>${item["templimit"] || ""}</td>
         `;
         tabela.appendChild(linha);
       });
