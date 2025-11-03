@@ -29,7 +29,7 @@ String savedSSID, savedPass;
 
 // Controle de tempo para leituras do DHT
 unsigned long ultimaMedicao = 0;
-const unsigned long intervaloMedicao = 5000; // 5 segundos
+const unsigned long intervaloMedicao = 10000; // 5 segundos
 
 // ------------------- Funções ------------------- //
 
@@ -37,23 +37,36 @@ void enviarDados() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
 
+    // Obter hora atual do ESP32
+    struct tm timeinfo;
+    char buf[32] = "";
+    if (getLocalTime(&timeinfo)) {
+      strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    }
+
+    // Montar URL com todos os parâmetros corretamente concatenados
     String url = String(scriptUrl) +
                  "?temperatura=" + String(temperaturaAtual) +
-                 "&umidade=" + String(umidadeAtual);
+                 "&umidade=" + String(umidadeAtual) +
+                 "&acao=add" +
+                 "&dataHora=" + String(buf) +
+                 "&nome=ESP32" +
+                 "&categoria=Sensor" +
+                 "&quantidade=1";
 
+    Serial.println("Enviando para: " + url); // debug
+
+    // Iniciar requisição HTTP
     http.begin(url);
     int httpResponseCode = http.GET();
 
     Serial.print("Código HTTP: ");
     Serial.println(httpResponseCode);
 
-    String resposta = http.getString();
-    Serial.print("Resposta do servidor: ");
-    Serial.println(resposta);
-
-
     if (httpResponseCode > 0) {
-      Serial.println("Dados enviados com sucesso!");
+      String resposta = http.getString();
+      Serial.print("Resposta do servidor: ");
+      Serial.println(resposta);
     } else {
       Serial.print("Erro ao enviar dados: ");
       Serial.println(httpResponseCode);
@@ -81,7 +94,7 @@ void medirSensor() {
         contadorMedicoes++;
 
         // Quando atingir 10 medições, calcula média e envia
-        if (contadorMedicoes >= 12) {
+        if (contadorMedicoes >= 6) {
             temperaturaAtual = temperaturaBuffer / contadorMedicoes;
             umidadeAtual = umidadeBuffer / contadorMedicoes;
             /*
@@ -428,20 +441,22 @@ String paginaPrincipalHTML = R"rawliteral(
       if (nome && categoria && quantidade) {
         const linha = document.createElement('tr');
         linha.innerHTML = `
-      <td>${buf}</td>
-      <td>${nome}</td>
-      <td>${categoria}</td>
-      <td>${quantidade}</td>
-      <td><div class="bolinhasLinha">⚪ ⚪ ⚪ ⚪ ⚪ ⚪</div></td>`;
+          <td>${buf}</td>
+          <td>${nome}</td>
+          <td>${categoria}</td>
+          <td>${quantidade}</td>
+          <td><div class="bolinhasLinha">⚪ ⚪ ⚪ ⚪ ⚪ ⚪</div></td>`;
         tabela.appendChild(linha);
         form.reset();
 
         // ENVIA PARA O GOOGLE SHEETS
-        const url = "https://script.google.com/macros/s/AKfycbzcCh5Ym7uCFpAwzwfYM-ztaGXLirnC83H5ltRll-zs21PhB96hmCn06ljMjR5YoSqY/exec" +
-          `?dataHora=${encodeURIComponent(buf)}` +
+        const dataHora = new Date().toISOString();
+        const url = "https://script.google.com/macros/s/AKfycbzcNfd605vVrF036-mczUy7_eIBdCfdRlcUhl-RrHRkOHq70A-fXYHwMVN2qbiRFqJX/exec" +
+          `?acao=add` +
+          `&dataHora=${encodeURIComponent(dataHora)}` +
           `&nome=${encodeURIComponent(nome)}` +
           `&categoria=${encodeURIComponent(categoria)}` +
-          `&quantidade=${encodeURIComponent(quantidade)}`;
+          `&quantidade=${encodeURIComponent(quantidade)}`;              
         fetch(url)
           .then(r => r.text())
           .then(txt => console.log("Resposta do Google:", txt))
@@ -449,7 +464,7 @@ String paginaPrincipalHTML = R"rawliteral(
       }
     });
 
-    const scriptURL = "https://script.google.com/macros/s/AKfycbzcCh5Ym7uCFpAwzwfYM-ztaGXLirnC83H5ltRll-zs21PhB96hmCn06ljMjR5YoSqY/exec";
+    const scriptURL = "https://script.google.com/macros/s/AKfycbzcNfd605vVrF036-mczUy7_eIBdCfdRlcUhl-RrHRkOHq70A-fXYHwMVN2qbiRFqJX/exec";
 
     function carregarDadosGoogle() {
       fetch(scriptURL + "?acao=listar")
@@ -479,6 +494,8 @@ function atualizarBolinhas(items, globalIndex, temperatura) {
     const startCycle = parseInt(items[i].startCycle, 10) || 1;
     let offset = (globalIndex - startCycle) % 6;
     if (offset < 0) offset += 6;
+    const bolIndex = offset + 1; // 1..6
+    const col = 6 + bolIndex; // coluna B1=7 ...
 
     const cor = (temperatura >= 18 && temperatura <= 25) ? '🟢' : '🔴';
     let html = ['⚪','⚪','⚪','⚪','⚪','⚪'];
@@ -492,13 +509,26 @@ function atualizarCiclo() {
   fetch(scriptURL + "?acao=listar")
     .then(r => r.json())
     .then(items => {
-      fetch(scriptURL + "?acao=getControl")
+      fetch(scriptURL + "?acao=getcontrol")
         .then(r => r.json())
         .then(ctrl => {
           atualizarBolinhas(items, parseInt(ctrl.globalIndex), parseFloat(ctrl.temperatura));
         });
     });
 }
+  function atualizarSensor() {
+    fetch("/dados")
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("temperatura").innerText = d.temperatura.toFixed(1) + " °C";
+        document.getElementById("umidade").innerText = d.umidade.toFixed(1) + " %";
+      })
+    .catch(e => console.error("Erro ao atualizar sensor:", e));
+}
+
+// Atualiza a cada 5s
+setInterval(atualizarSensor, 5000);
+atualizarSensor();
 
 // Atualiza a cada 1 minuto
 setInterval(atualizarCiclo, 60000);
