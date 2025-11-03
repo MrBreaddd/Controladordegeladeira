@@ -22,6 +22,9 @@ bool mainServerStarted = false;
 
 const char* scriptUrl = "https://script.google.com/macros/s/AKfycbycH9JWNKUv2TVZgx8j0zgyZLc3TOwMNK0m83Wou3kynhcBDM2ULSh7Hs1Ne-hTSSvI/exec"; //Script para temperatura
 
+unsigned long ultimaAtualizacaoBolinhas = 0;
+const unsigned long intervaloBolinhas = 60000; // 1 minuto
+
 String savedSSID, savedPass;
 
 // Controle de tempo para leituras do DHT
@@ -93,6 +96,33 @@ void medirSensor() {
     }
 }
 
+void atualizarBolinhas() {
+  unsigned long agora = millis();
+  if (agora - ultimaAtualizacaoBolinhas < intervaloBolinhas) return;
+  ultimaAtualizacaoBolinhas = agora;
+
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  static int globalIndex = 0;
+  // incrementa índice ciclicamente 1..6
+  globalIndex = (globalIndex % 6) + 1;
+
+  String cor = (temperaturaAtual >= 18 && temperaturaAtual <= 25) ? "🟢" : "🔴";
+
+  String url = String(scriptUrl) +
+               "?acao=cycle&index=" + globalIndex +
+               "&temperatura=" + temperaturaAtual;
+
+  HTTPClient http;
+  http.begin(url);
+  int code = http.GET();
+  if (code > 0) {
+    Serial.printf("Bolinhas atualizadas: índice %d, cor %s\n", globalIndex, cor.c_str());
+  } else {
+    Serial.println("Erro ao atualizar bolinhas");
+  }
+  http.end();
+}
 // ------------------- Páginas HTML ------------------- //
 
 const char* paginaConfig = R"rawliteral(
@@ -222,153 +252,257 @@ String paginaPrincipalHTML = R"rawliteral(
 <!DOCTYPE html>
 <html lang='pt-BR'>
 <head>
-<meta charset='UTF-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1.0'>
-<title>ESP32 - Cadastro e DHT11</title>
-<style>
-body{font-family:Arial;background:#f0f2f5;margin:0;padding:20px;}
-h1{text-align:center;color:#333;}
-.tab-buttons{text-align:center;margin-bottom:20px;}
-.tab-buttons button{padding:10px 20px;margin:5px;border:none;border-radius:5px;
-background:#28a745;color:#fff;font-weight:bold;cursor:pointer;}
-.tab-buttons button.active{background:#218838;}
-.tab{display:none;max-width:700px;background:#fff;padding:20px;margin:0 auto;
-border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,0.1);}
-label{font-weight:bold;display:block;margin-top:10px;}
-input,select,button[type=submit]{width:100%;padding:8px;margin-top:5px;
-border:1px solid #ccc;border-radius:5px;}
-button[type=submit]{background:#28a745;color:#fff;font-weight:bold;cursor:pointer;}
-button[type=submit]:hover{background:#218838;}
-table{width:100%;border-collapse:collapse;margin-top:20px;}
-th,td{padding:10px;text-align:left;border-bottom:1px solid #ccc;}
-th{background:#28a745;color:#fff;}
-</style>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>ESP32 - Cadastro e DHT11</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+
+    .tab-buttons {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .tab-buttons button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      background: #28a745;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .tab-buttons button.active {
+      background: #218838;
+    }
+
+    .tab {
+      display: none;
+      max-width: 700px;
+      background: #fff;
+      padding: 20px;
+      margin: 0 auto;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 10px;
+    }
+
+    input,
+    select,
+    button[type=submit] {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    button[type=submit] {
+      background: #28a745;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button[type=submit]:hover {
+      background: #218838;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th,
+    td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #ccc;
+    }
+
+    th {
+      background: #28a745;
+      color: #fff;
+    }
+
+    .bolinha {
+      font-size: 20px;
+      margin-right: 4px;
+    }
+  </style>
 </head>
+
 <body>
-<h1>Monitor</h1>
-<div class='tab-buttons'>
-<button id='btnCadastro' class='active' onclick="showTab('cadastro')">Cadastro</button>
-<button id='btnDht' onclick="showTab('dht')">Medição DHT11</button>
-</div>
+  <h1>Monitor</h1>
+  <div class='tab-buttons'>
+    <button id='btnCadastro' class='active' onclick="showTab('cadastro')">Cadastro</button>
+    <button id='btnDht' onclick="showTab('dht')">Medição DHT11</button>
+  </div>
 
-<div id='cadastro' class='tab' style='display:block;'>
-<form id='form-alimento'>
-<label>Nome do Alimento:</label>
-<input type='text' id='nome' required>
-<label>Categoria:</label>
-<select id='categoria' required>
-<option value=''>Selecione...</option>
-<option>Fruta</option><option>Verdura</option><option>Legume</option>
-<option>Carne</option><option>Bebida</option><option>Outro</option>
-</select>
-<label>Quantidade:</label>
-<input type='number' id='quantidade' min='1' required>
-<label>Temperatura Limite:</label>
-<input type='text' id='templimit' required>
-<button type='submit'>Cadastrar</button>
-</form>
+  <div id='cadastro' class='tab' style='display:block;'>
+    <form id='form-alimento'>
+      <label>Nome do Alimento:</label>
+      <input type='text' id='nome' required>
+      <label>Categoria:</label>
+      <select id='categoria' required>
+        <option value=''>Selecione...</option>
+        <option>Fruta</option>
+        <option>Verdura</option>
+        <option>Legume</option>
+        <option>Carne</option>
+        <option>Bebida</option>
+        <option>Outro</option>
+      </select>
+      <label>Quantidade:</label>
+      <input type='number' id='quantidade' min='1' required>
+      <button type='submit'>Cadastrar</button>
+    </form>
 
-<table id='tabela-alimentos'>
-<thead>
-<tr>
-<th>Data e Hora</th>
-<th>Nome</th>
-<th>Categoria</th>
-<th>Quantidade</th>
-<th>Monitoramento</th>
-</tr>
-</thead>
-<tbody></tbody>
-</table>
-</div>
+    <table id='tabela-alimentos'>
+      <thead>
+        <tr>
+          <th>Data e Hora</th>
+          <th>Nome</th>
+          <th>Categoria</th>
+          <th>Quantidade</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-<div id='dht' class='tab'>
-<h2>Leituras do Sensor DHT11</h2>
-<p>Temperatura: <span id='temperatura'>Carregando...</span></p>
-<p>Umidade: <span id='umidade'>Carregando...</span></p>
-</div>
+  <div id='dht' class='tab'>
+    <h2>Leituras do Sensor DHT11</h2>
+    <p>Temperatura: <span id='temperatura'>Carregando...</span></p>
+    <p>Umidade: <span id='umidade'>Carregando...</span></p>
+    <div id="monitoramento">
+      <h3>Monitoramento:</h3>
+      <span id="bolinhas">⚪ ⚪ ⚪ ⚪ ⚪ ⚪</span>
+    </div>
+  </div>
 
-<script>
-// Valor coletado pelo ESP32 e substituido antes do envio
-let buf = %BUF%; 
+  <script>
+    // Valor coletado pelo ESP32 e substituído antes do envio
+    let buf = %BUF%;
 
-function showTab(tab){
-  document.getElementById('cadastro').style.display=(tab==='cadastro')?'block':'none';
-  document.getElementById('dht').style.display=(tab==='dht')?'block':'none';
-  document.getElementById('btnCadastro').classList.toggle('active',tab==='cadastro');
-  document.getElementById('btnDht').classList.toggle('active',tab==='dht');
-}
+    // Controle das bolinhas progressivas
+    let progresso = 0;
+    const MAX_BOLINHAS = 6;
+    const TEMPERATURA_MIN = 18;
+    const TEMPERATURA_MAX = 25;
 
-const form=document.getElementById('form-alimento');
-const tabela=document.querySelector('#tabela-alimentos tbody');
-form.addEventListener('submit', e=>{
-  e.preventDefault();
-  const nome=document.getElementById('nome').value.trim();
-  const categoria=document.getElementById('categoria').value;
-  const quantidade=document.getElementById('quantidade').value;
+    function showTab(tab) {
+      document.getElementById('cadastro').style.display = (tab === 'cadastro') ? 'block' : 'none';
+      document.getElementById('dht').style.display = (tab === 'dht') ? 'block' : 'none';
+      document.getElementById('btnCadastro').classList.toggle('active', tab === 'cadastro');
+      document.getElementById('btnDht').classList.toggle('active', tab === 'dht');
+    }
 
-  if(nome && categoria && quantidade){
-    const linha=document.createElement('tr');
-    linha.innerHTML=`
+    const form = document.getElementById('form-alimento');
+    const tabela = document.querySelector('#tabela-alimentos tbody');
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const nome = document.getElementById('nome').value.trim();
+      const categoria = document.getElementById('categoria').value;
+      const quantidade = document.getElementById('quantidade').value;
+
+      if (nome && categoria && quantidade) {
+        const linha = document.createElement('tr');
+        linha.innerHTML = `
       <td>${buf}</td>
       <td>${nome}</td>
       <td>${categoria}</td>
       <td>${quantidade}</td>
-      <td></td>`;
-    tabela.appendChild(linha);
-    form.reset();
-
-    // ENVIA PARA O GOOGLE SHEETS
-    const url = "https://script.google.com/macros/s/AKfycbzGhVyDJNsVfDlK7P2MoR9VI5YYpExCU9-ckijQhMW9cX4x2pN-qhaTJ3mKKHQj0-06/exec" +
-      `?dataHora=${encodeURIComponent(buf)}` +
-      `&nome=${encodeURIComponent(nome)}` +
-      `&categoria=${encodeURIComponent(categoria)}` +
-      `&quantidade=${encodeURIComponent(quantidade)}` +
-      `&monitoramento=` +
-      `&templimit`;
-    fetch(url)
-      .then(r => r.text())
-      .then(txt => console.log("Resposta do Google:", txt))
-      .catch(err => console.error("Erro ao enviar:", err));
-  }
-});
-
-const scriptURL = "https://script.google.com/macros/s/AKfycbzGhVyDJNsVfDlK7P2MoR9VI5YYpExCU9-ckijQhMW9cX4x2pN-qhaTJ3mKKHQj0-06/exec";
-
-function carregarDadosGoogle() {
-  fetch(scriptURL + "?acao=listar")
-    .then(response => response.json())
-    .then(dados => {
-      const tabela = document.querySelector("#tabela-alimentos tbody");
-      tabela.innerHTML = ""; // limpa tabela atual
-
-      dados.forEach(item => {
-        const linha = document.createElement("tr");
-        linha.innerHTML = `
-        <td>${item["dataHora"] || ""}</td>
-        <td>${item["nome"] || ""}</td>
-        <td>${item["categoria"] || ""}</td>
-        <td>${item["quantidade"] || ""}</td>
-        <td>${item["monitoramento"] || ""}</td>
-        <td>${item["templimit"] || ""}</td>
-        `;
+      <td><div class="bolinhasLinha">⚪ ⚪ ⚪ ⚪ ⚪ ⚪</div></td>`;
         tabela.appendChild(linha);
-      });
-    })
-    .catch(err => console.error("Erro ao carregar dados:", err));
-}
+        form.reset();
 
-// Chama a função ao iniciar
-window.addEventListener("load", carregarDadosGoogle);
+        // ENVIA PARA O GOOGLE SHEETS
+        const url = "https://script.google.com/macros/s/AKfycbzcCh5Ym7uCFpAwzwfYM-ztaGXLirnC83H5ltRll-zs21PhB96hmCn06ljMjR5YoSqY/exec" +
+          `?dataHora=${encodeURIComponent(buf)}` +
+          `&nome=${encodeURIComponent(nome)}` +
+          `&categoria=${encodeURIComponent(categoria)}` +
+          `&quantidade=${encodeURIComponent(quantidade)}`;
+        fetch(url)
+          .then(r => r.text())
+          .then(txt => console.log("Resposta do Google:", txt))
+          .catch(err => console.error("Erro ao enviar:", err));
+      }
+    });
 
-function atualizarDados(){
-  fetch('/dados').then(r=>r.json()).then(data=>{
-    document.getElementById('temperatura').innerHTML=data.temperatura+' &#8451;';
-    document.getElementById('umidade').innerHTML=data.umidade+' %';
+    const scriptURL = "https://script.google.com/macros/s/AKfycbzcCh5Ym7uCFpAwzwfYM-ztaGXLirnC83H5ltRll-zs21PhB96hmCn06ljMjR5YoSqY/exec";
+
+    function carregarDadosGoogle() {
+      fetch(scriptURL + "?acao=listar")
+        .then(response => response.json())
+        .then(dados => {
+          tabela.innerHTML = ""; // limpa tabela atual
+          dados.forEach(item => {
+            const linha = document.createElement("tr");
+            linha.innerHTML = `
+          <td>${item["dataHora"] || ""}</td>
+          <td>${item["nome"] || ""}</td>
+          <td>${item["categoria"] || ""}</td>
+          <td>${item["quantidade"] || ""}</td>
+          <td><div class="bolinhasLinha">⚪ ⚪ ⚪ ⚪ ⚪ ⚪</div></td>
+        `;
+            tabela.appendChild(linha);
+          });
+        })
+        .catch(err => console.error("Erro ao carregar dados:", err));
+    }
+
+// Atualiza bolinhas de cada item usando startCycle + índice global
+function atualizarBolinhas(items, globalIndex, temperatura) {
+  const tabela = document.querySelector('#tabela-alimentos tbody');
+  tabela.querySelectorAll('tr').forEach((linha, i) => {
+    const bolinhasDiv = linha.querySelector('.bolinhasLinha');
+    const startCycle = parseInt(items[i].startCycle, 10) || 1;
+    let offset = (globalIndex - startCycle) % 6;
+    if (offset < 0) offset += 6;
+
+    const cor = (temperatura >= 18 && temperatura <= 25) ? '🟢' : '🔴';
+    let html = ['⚪','⚪','⚪','⚪','⚪','⚪'];
+    html[offset] = cor;
+    bolinhasDiv.innerHTML = html.join(' ');
   });
 }
-setInterval(atualizarDados,5000);
-atualizarDados();
+
+// Função para buscar ciclo global + temperatura do Apps Script e atualizar bolinhas
+function atualizarCiclo() {
+  fetch(scriptURL + "?acao=listar")
+    .then(r => r.json())
+    .then(items => {
+      fetch(scriptURL + "?acao=getControl")
+        .then(r => r.json())
+        .then(ctrl => {
+          atualizarBolinhas(items, parseInt(ctrl.globalIndex), parseFloat(ctrl.temperatura));
+        });
+    });
+}
+
+// Atualiza a cada 1 minuto
+setInterval(atualizarCiclo, 60000);
+window.addEventListener("load", atualizarCiclo);
 </script>
 </body>
 </html>
@@ -465,6 +599,9 @@ void loop() {
         Serial.println("Servidor principal iniciado. IP: "+WiFi.localIP().toString());
     }
 
-    if(mainServerStarted){ mainServer.handleClient();
-    }
+    if(mainServerStarted){
+    mainServer.handleClient();
+    medirSensor();       // lê temperatura/umidade
+    atualizarBolinhas(); // envia ciclo de bolinhas a cada minuto
+  }
 }
