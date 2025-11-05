@@ -1,0 +1,88 @@
+const SPREADSHEET_ID = "1V8Qz7FqgkpIr-SAjjDTz3qL_Ud4ToNQ8YbqX2IgaFfY";
+const NOME_ABA = "Página1";
+
+
+//====================== ROTAS ========================
+
+function doGet(e) {
+
+  // 1) recebimento de dados do ESP32
+  if (e && e.parameter && e.parameter.nome) {
+    const dataHora   = e.parameter.dataHora   || "";
+    const nome       = e.parameter.nome       || "";
+    const categoria  = e.parameter.categoria  || "";
+    const quantidade = e.parameter.quantidade || "";
+    const b1 = "⚫";
+    const b2 = "⚫";
+    const b3 = "⚫";
+    const b4 = "⚫";
+    const b5 = "⚫";
+    const b6 = "⚫";
+
+    salvarRegistro(dataHora, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6);
+
+    return ContentService.createTextOutput("OK");
+  }
+
+  // 2) listagem para o HTML (interface principal no ESP32)
+  if (e && e.parameter && e.parameter.acao == "listar") {
+    const dados = listarDados();
+    return ContentService
+      .createTextOutput(JSON.stringify(dados))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // padrão se abrir o link direto
+  return ContentService
+    .createTextOutput("SCRIPT OK - GELADEIRA ONLINE");
+
+  if (e && e.parameter && e.parameter.acao == "id") {
+    const dados = listarId();
+    return ContentService
+      .createTextOutput(JSON.stringify(dados))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+//====================== BANCO / PLANILHA ========================
+
+function salvarRegistro(dataHora, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6) {
+  const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const aba = ss.getSheetByName(NOME_ABA);
+
+  // empilha sempre no final
+  aba.appendRow([dataHora, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6]);
+}
+
+
+function listarDados() {
+  const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const aba = ss.getSheetByName(NOME_ABA);
+
+  // pega todos os dados menos o cabeçalho
+  const dados = aba.getDataRange().getValues();
+  const cab   = dados.shift(); // remove cabeçalho
+
+  // montar objeto para json padrão da interface
+  return dados.map(linha => {
+    return {
+      dataHora:   linha[0],
+      nome:       linha[1],
+      categoria:  linha[2],
+      quantidade: linha[3]
+    }
+  });
+}
+
+function listarId() {
+  const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const aba = ss.getSheetByName(NOME_ABA);
+
+  const dados = aba.getDataRange().getValues();
+  dados.shift(); // remove cabeçalho
+
+  // retorna vetor só com ids reais de cada linha
+  return dados.map((r, index) => {
+    return index + 2;
+  });
+}

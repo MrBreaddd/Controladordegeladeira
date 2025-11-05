@@ -20,7 +20,7 @@ int contadorMedicoes = 0;
 bool finalizeRequested = false;
 bool mainServerStarted = false;
 
-const char* scriptUrl = "https://script.google.com/macros/s/AKfycbycH9JWNKUv2TVZgx8j0zgyZLc3TOwMNK0m83Wou3kynhcBDM2ULSh7Hs1Ne-hTSSvI/exec";
+const char* scriptUrl = "https://script.google.com/macros/s/AKfycbzvI1MD2EVyt0Ghqzj2UNYmdOiTAhQKQK2J67MAmQG54BcDI8Feo6nEysiUbWituZPX/exec";
 
 String savedSSID, savedPass;
 
@@ -273,7 +273,6 @@ th{background:#28a745;color:#fff;}
 <th>Nome</th>
 <th>Categoria</th>
 <th>Quantidade</th>
-<th>Validade</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -317,12 +316,11 @@ form.addEventListener('submit', e=>{
     form.reset();
 
     // ENVIA PARA O GOOGLE SHEETS
-    const url = "https://script.google.com/macros/s/AKfycbzpzURO67wYObIRM8wfKXhfjHfnoXcMPjoo5fXh_uovGYbYeUA59KukNttuBu5DM5kp/exec" +
+    const url = "https://script.google.com/macros/s/AKfycbxP_y9Tyglv1GjYUlPTYyaUSs9jOzsEhyANuUAspPoCRVqsxQJw0t7OA68oAnCMgSWw/exec" +
       `?dataHora=${encodeURIComponent(buf)}` +
       `&nome=${encodeURIComponent(nome)}` +
       `&categoria=${encodeURIComponent(categoria)}` +
-      `&quantidade=${encodeURIComponent(quantidade)}` +
-      `&validade=`;
+      `&quantidade=${encodeURIComponent(quantidade)}`;
     fetch(url)
       .then(r => r.text())
       .then(txt => console.log("Resposta do Google:", txt))
@@ -330,7 +328,7 @@ form.addEventListener('submit', e=>{
   }
 });
 
-const scriptURL = "https://script.google.com/macros/s/AKfycbzpzURO67wYObIRM8wfKXhfjHfnoXcMPjoo5fXh_uovGYbYeUA59KukNttuBu5DM5kp/exec";
+const scriptURL = "https://script.google.com/macros/s/AKfycbxP_y9Tyglv1GjYUlPTYyaUSs9jOzsEhyANuUAspPoCRVqsxQJw0t7OA68oAnCMgSWw/exec";
 
 function carregarDadosGoogle() {
   fetch(scriptURL + "?acao=listar")
@@ -346,7 +344,6 @@ function carregarDadosGoogle() {
         <td>${item["nome"] || ""}</td>
         <td>${item["categoria"] || ""}</td>
         <td>${item["quantidade"] || ""}</td>
-        <td>${item["validade"] || ""}</td>
         `;
         tabela.appendChild(linha);
       });
