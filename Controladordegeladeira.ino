@@ -17,6 +17,11 @@ float umidadeAtual = 0;
 float umidadeBuffer = 0;
 int contadorMedicoes = 0;
 
+// Armazenamento de das medias(Daniel)
+float temperaturaSomaIntervalo[6] = {0};
+int temperaturaContagemIntervalo[6] = {0};
+//
+
 bool finalizeRequested = false;
 bool mainServerStarted = false;
 
@@ -81,6 +86,24 @@ void medirSensor() {
         if (contadorMedicoes >= 12) {
             temperaturaAtual = temperaturaBuffer / contadorMedicoes;
             umidadeAtual = umidadeBuffer / contadorMedicoes;
+            
+            //Deteminar qual periodo de 4h estamos(Daniel)
+            struct tm timeinfo;
+            if (getLocalTime(&timeinfo)) {
+              int periodo = timeinfo.tm_hour / 4; // 0..5
+
+              temperaturaSomaIntervalo[periodo] += temperaturaAtual;
+              temperaturaContagemIntervalo[periodo]++;
+            }
+
+            if (getLocalTime(&timeinfo)) {
+                if (timeinfo.tm_hour == 0 && timeinfo.tm_min == 0 && timeinfo.tm_sec < 5) {
+                    memset(temperaturaSomaIntervalo, 0, sizeof(temperaturaSomaIntervalo));
+                    memset(temperaturaContagemIntervalo, 0 , sizeof(temperaturaContagemIntervalo));
+                    Serial.println("Buffers de média resetados para novo dia.");
+                }
+            }
+            //
             
             Serial.printf("Média das últimas 10 medições:\nTemperatura: %.1f°C, Umidade: %.1f%%\n",
                           temperaturaAtual, umidadeAtual);
@@ -242,6 +265,17 @@ button[type=submit]:hover{background:#218838;}
 table{width:100%;border-collapse:collapse;margin-top:20px;}
 th,td{padding:10px;text-align:left;border-bottom:1px solid #ccc;}
 th{background:#28a745;color:#fff;}
+.circle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  margin: 2px;
+}
+.green { background: #2ecc71; }
+.yellow { background: #f1c40f; }
+.red { background: #e74c3c; }
+.gray { background: #bdc3c7}
 </style>
 </head>
 <body>
@@ -273,6 +307,7 @@ th{background:#28a745;color:#fff;}
 <th>Nome</th>
 <th>Categoria</th>
 <th>Quantidade</th>
+<th>Status Térmico</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -311,7 +346,7 @@ form.addEventListener('submit', e=>{
       <td>${nome}</td>
       <td>${categoria}</td>
       <td>${quantidade}</td>
-      <td></td>`;
+      <td class="status-termico"></td>`;
     tabela.appendChild(linha);
     form.reset();
 
@@ -362,6 +397,40 @@ function atualizarDados(){
 }
 setInterval(atualizarDados,5000);
 atualizarDados();
+async function atualizarStatusTermico(){
+    const resp = await fetch('/intervalos');
+    const medias = await resp.json();
+
+    const linhas = document.querySelectorAll("#tabela-alimentos tbody tr");
+
+    linhas.forEach(linha => {
+        const dataHora = linha.children[0].innerText;
+        const cel = linha.querySelector(".status-termico");
+
+        if(!cel || !dataHora) return;
+
+        const cadastro = new Date(dataHora);
+        const periodoCadastro = Math.floor(cadastro.getHours() / 4);
+
+        cel.innerHTML = "";
+
+        for (let i = 0; i < 6; i++) {
+            let classe = "gray"; // padrão = sem histórico
+
+            if(i >= periodoCadastro) {
+                const m = medias[i] || 0;
+                if(m < 4) classe = "green";
+                else if(m <= 4.5) classe = "yellow";
+                else classe = "red";
+            }
+
+            cel.innerHTML += `<span class="circle ${classe}"></span>`;
+        }
+    });
+}
+
+setInterval(atualizarStatusTermico, 10000);
+window.addEventListener("load", atualizarStatusTermico);
 </script>
 </body>
 </html>
@@ -405,6 +474,22 @@ void handleDados() {
     String json="{\"temperatura\":"+String(temperaturaAtual)+",\"umidade\":"+String(umidadeAtual)+"}";
     mainServer.send(200,"application/json",json);
 }
+
+//(Daniel)
+void handleIntervalos() {
+  String json = "[";
+  for (int i = 0; i < 6; i++) {
+    float media = 0;
+    if (temperaturaContagemIntervalo[i] > 0) {
+      media = temperaturaSomaIntervalo[i] / temperaturaContagemIntervalo[i];
+    }
+    json += String(media, 2);
+    if (i < 5) json += ",";
+  }
+  json += "]";
+  mainServer.send(200, "application/json", json);
+}
+//
 
 void handleCadastrar() {
     String p = mainServer.arg("produto");
@@ -452,6 +537,11 @@ void loop() {
         mainServer.on("/",HTTP_GET,handleMainRoot);
         mainServer.on("/dados",HTTP_GET,handleDados);
         mainServer.on("/cadastrar",HTTP_POST,handleCadastrar);
+        
+        //(Daniel)
+        mainServer.on("/intervalos", HTTP_GET, handleIntervalos);
+        //
+
         mainServer.begin();
         mainServerStarted=true;
         finalizeRequested=false;
