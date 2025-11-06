@@ -17,15 +17,15 @@ float umidadeAtual = 0;
 float umidadeBuffer = 0;
 int contadorMedicoes = 0;
 
-// Armazenamento de das medias(Daniel)
 float temperaturaSomaIntervalo[6] = {0};
 int temperaturaContagemIntervalo[6] = {0};
-//
+// Guarda o último dia (1..31) que foi registrado para reset diário
+int ultimoDiaRegistrado = -1;
 
 bool finalizeRequested = false;
 bool mainServerStarted = false;
 
-const char* scriptUrl = "https://script.google.com/macros/s/AKfycbzvI1MD2EVyt0Ghqzj2UNYmdOiTAhQKQK2J67MAmQG54BcDI8Feo6nEysiUbWituZPX/exec";
+const char *scriptUrl = "https://script.google.com/macros/s/AKfycbzBekL3EUEMCUWtXMaSjFvEfCf8WptoNX-9bC5fnm_tpxOjPiO-k2blqzBMWDy4Ywml/exec";
 
 String savedSSID, savedPass;
 
@@ -35,8 +35,9 @@ const unsigned long intervaloMedicao = 5000; // 5 segundos
 
 // ------------------- Funções ------------------- //
 
-void enviarDados() {
-  if (WiFi.status() == WL_CONNECTED) {
+void enviarDados()
+{
+  if (WiFi.status() == WL_CONNECTED){
     HTTPClient http;
 
     String url = String(scriptUrl) +
@@ -53,72 +54,69 @@ void enviarDados() {
     Serial.print("Resposta do servidor: ");
     Serial.println(resposta);
 
-
-    if (httpResponseCode > 0) {
+    if (httpResponseCode > 0){
       Serial.println("Dados enviados com sucesso!");
-    } else {
+    }
+    else{
       Serial.print("Erro ao enviar dados: ");
       Serial.println(httpResponseCode);
     }
 
     http.end();
-  } else {
+  }
+  else{
     Serial.println("WiFi desconectado, não foi possível enviar os dados.");
   }
 }
 
 // Leitura do sensor (não bloqueante)
-void medirSensor() {
-    unsigned long agora = millis();
-    if (agora - ultimaMedicao >= intervaloMedicao) {
-        ultimaMedicao = agora;
-        float t = dht.readTemperature();
-        float u = dht.readHumidity();
-        
-        // Se leitura inválida, ignora e sai
-        if (isnan(t) || isnan(u)) return;
+void medirSensor()
+{
+  unsigned long agora = millis();
+  if (agora - ultimaMedicao >= intervaloMedicao){
+    ultimaMedicao = agora;
+    float t = dht.readTemperature();
+    float u = dht.readHumidity();
 
-        temperaturaBuffer += t;
-        umidadeBuffer += u;
-        contadorMedicoes++;
-
-        // Quando atingir 10 medições, calcula média e envia
-        if (contadorMedicoes >= 12) {
-            temperaturaAtual = temperaturaBuffer / contadorMedicoes;
-            umidadeAtual = umidadeBuffer / contadorMedicoes;
-            
-            //Deteminar qual periodo de 4h estamos(Daniel)
-            struct tm timeinfo;
-            if (getLocalTime(&timeinfo)) {
-              int periodo = timeinfo.tm_hour / 4; // 0..5
-
-              temperaturaSomaIntervalo[periodo] += temperaturaAtual;
-              temperaturaContagemIntervalo[periodo]++;
-            }
-
-            if (getLocalTime(&timeinfo)) {
-                if (timeinfo.tm_hour == 0 && timeinfo.tm_min == 0 && timeinfo.tm_sec < 5) {
-                    memset(temperaturaSomaIntervalo, 0, sizeof(temperaturaSomaIntervalo));
-                    memset(temperaturaContagemIntervalo, 0 , sizeof(temperaturaContagemIntervalo));
-                    Serial.println("Buffers de média resetados para novo dia.");
-                }
-            }
-            //
-            
-            Serial.printf("Média das últimas 10 medições:\nTemperatura: %.1f°C, Umidade: %.1f%%\n",
-                          temperaturaAtual, umidadeAtual);
-            enviarDados();
-
-            temperaturaBuffer = 0;
-            umidadeBuffer = 0;
-            contadorMedicoes = 0;
-        }
+    // Se leitura inválida, ignora e sai
+    if (isnan(t) || isnan(u)){
+      return;
     }
+
+    temperaturaBuffer += t;
+    umidadeBuffer += u;
+    contadorMedicoes++;
+
+    // Quando atingir 10 medições, calcula média e envia
+    if (contadorMedicoes >= 12){
+      temperaturaAtual = temperaturaBuffer / contadorMedicoes;
+      umidadeAtual = umidadeBuffer / contadorMedicoes;
+    
+      // Determinar qual periodo de 4h estamos (apenas UMA chamada)
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo))
+      {
+        int periodo = timeinfo.tm_hour / 4; // 0..5
+      
+        // Se o dia mudou antes de adicionarmos, o reset já terá sido feito no loop()
+        temperaturaSomaIntervalo[periodo] += temperaturaAtual;
+        temperaturaContagemIntervalo[periodo]++;
+      }
+    
+      Serial.printf("Média das últimas %d medições:\nTemperatura: %.1f°C, Umidade: %.1f%%\n",
+                    contadorMedicoes, temperaturaAtual, umidadeAtual);
+      enviarDados();
+      
+      temperaturaBuffer = 0;
+      umidadeBuffer = 0;
+      contadorMedicoes = 0;
+    }
+  }
 }
 
 // ------------------- Páginas HTML ------------------- //
 
-const char* paginaConfig = R"rawliteral(
+const char *paginaConfig = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -210,8 +208,9 @@ const char* paginaConfig = R"rawliteral(
 </html>
 )rawliteral";
 
-String paginaConectando() {
-    return R"rawliteral(
+String paginaConectando()
+{
+  return R"rawliteral(
 <!DOCTYPE html>
 <html><head><meta charset='utf-8'><title>Conectando...</title></head><body>
 <h1>Tentando conectar...</h1><p id='status'>Aguardando...</p>
@@ -275,7 +274,7 @@ th{background:#28a745;color:#fff;}
 .green { background: #2ecc71; }
 .yellow { background: #f1c40f; }
 .red { background: #e74c3c; }
-.gray { background: #bdc3c7}
+.gray { background: #bdc3c7;}
 </style>
 </head>
 <body>
@@ -375,10 +374,11 @@ function carregarDadosGoogle() {
       dados.forEach(item => {
         const linha = document.createElement("tr");
         linha.innerHTML = `
-        <td>${item["dataHora"] || ""}</td>
-        <td>${item["nome"] || ""}</td>
-        <td>${item["categoria"] || ""}</td>
-        <td>${item["quantidade"] || ""}</td>
+          <td>${item["dataHora"] || ""}</td>
+          <td>${item["nome"] || ""}</td>
+          <td>${item["categoria"] || ""}</td>
+          <td>${item["quantidade"] || ""}</td>
+          <td class="status-termico"></td>
         `;
         tabela.appendChild(linha);
       });
@@ -387,7 +387,10 @@ function carregarDadosGoogle() {
 }
 
 // Chama a função ao iniciar
-window.addEventListener("load", carregarDadosGoogle);
+window.addEventListener("load", () => {
+    carregarDadosGoogle();
+    setTimeout(atualizarStatusTermico, 1500);
+});
 
 function atualizarDados(){
   fetch('/dados').then(r=>r.json()).then(data=>{
@@ -398,70 +401,107 @@ function atualizarDados(){
 setInterval(atualizarDados,5000);
 atualizarDados();
 async function atualizarStatusTermico(){
-    const resp = await fetch('/intervalos');
-    const medias = await resp.json();
+  const resp = await fetch('/intervalos');
+  const medias = await resp.json();
 
-    const linhas = document.querySelectorAll("#tabela-alimentos tbody tr");
+  const linhas = document.querySelectorAll("#tabela-alimentos tbody tr");
 
-    linhas.forEach(linha => {
-        const dataHora = linha.children[0].innerText;
-        const cel = linha.querySelector(".status-termico");
+  const agora = new Date();
+  const periodoAgora = Math.floor(agora.getHours() / 4); // período real do momento
 
-        if(!cel || !dataHora) return;
-
-        const cadastro = new Date(dataHora);
-        const periodoCadastro = Math.floor(cadastro.getHours() / 4);
-
-        cel.innerHTML = "";
-
-        for (let i = 0; i < 6; i++) {
-            let classe = "gray"; // padrão = sem histórico
-
-            if(i >= periodoCadastro) {
-                const m = medias[i] || 0;
-                if(m < 4) classe = "green";
-                else if(m <= 4.5) classe = "yellow";
-                else classe = "red";
-            }
-
-            cel.innerHTML += `<span class="circle ${classe}"></span>`;
+  linhas.forEach(linha => {
+    const dataHora = linha.children[0].innerText;
+    const cel = linha.querySelector(".status-termico");
+    if(!cel || !dataHora) return;
+    // conversor robusto DD/MM/YYYY para Date
+    function parseData(dataString){
+        const partes = dataString.split(/[/ :]/); 
+        if (partes.length >= 5){
+            const [dia, mes, ano, hora, min, seg] = partes;
+            return new Date(`${ano}-${mes}-${dia}T${hora}:${min}:${seg || "00"}`);
         }
-    });
+        return new Date(dataString);
+    }
+    const cadastro = parseData(dataHora);
+    const periodoCadastro = Math.floor(cadastro.getHours() / 4);
+    cel.innerHTML = "";
+    
+    for (let i = 0; i < 6; i++) {
+
+      let classe = "gray";
+
+        // período antes do cadastro -> sem histórico
+      if (i < periodoCadastro) {
+        classe = "gray";
+
+        // futuro do dia ainda não chegou
+      } else if (i > periodoAgora) {
+        classe = "gray";
+
+        // período atual ou passado -> verifica se há média
+      } else {
+          // medias[i] pode ser null (sem dados) — se for, mantemos gray
+          const m = medias[i];
+
+          if (m === null || m === undefined) {
+            classe = "gray";
+          } else {
+              const media = Number(m); // já é número, mas garantimos
+              if (media < 4) classe = "green";
+              else if (media <= 4.5) classe = "yellow";
+              else classe = "red";
+          }
+      }      
+      cel.innerHTML += `<span class="circle ${classe}"></span>`;
+    }
+  });
 }
 
 setInterval(atualizarStatusTermico, 10000);
-window.addEventListener("load", atualizarStatusTermico);
+window.addEventListener("load", () => {
+    setTimeout(atualizarStatusTermico, 1500);
+});
 </script>
 </body>
 </html>
 )rawliteral";
 
 // ------------------- Handlers ------------------- //
-void handlePortalRoot() { portalServer.send(200,"text/html",paginaConfig); }
+void handlePortalRoot() { portalServer.send(200, "text/html", paginaConfig); }
 
-void handleSalvar() {
-    savedSSID = portalServer.arg("ssid");
-    savedPass = portalServer.arg("senha");
-    Serial.println("Credenciais: "+savedSSID);
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.begin(savedSSID.c_str(), savedPass.c_str());
-    portalServer.send(200,"text/html",paginaConectando());
+void handleSalvar()
+{
+  savedSSID = portalServer.arg("ssid");
+  savedPass = portalServer.arg("senha");
+  Serial.println("Credenciais: " + savedSSID);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.begin(savedSSID.c_str(), savedPass.c_str());
+  portalServer.send(200, "text/html", paginaConectando());
 }
 
-void handleStatus() {
-    String json="{\"connected\":";
-    if(WiFi.status()==WL_CONNECTED){ json+="true,\"ip\":\""+WiFi.localIP().toString()+"\""; }
-    else json+="false";
-    json+="}";
-    portalServer.send(200,"application/json",json);
+void handleStatus()
+{
+  String json = "{\"connected\":";
+  if (WiFi.status() == WL_CONNECTED){
+    json += "true,\"ip\":\"" + WiFi.localIP().toString() + "\"";
+  }
+  else
+    json += "false";
+  json += "}";
+  portalServer.send(200, "application/json", json);
 }
 
-void handleFinalize() { portalServer.send(200,"text/plain","OK"); finalizeRequested=true; }
+void handleFinalize()
+{
+  portalServer.send(200, "text/plain", "OK");
+  finalizeRequested = true;
+}
 
-void handleMainRoot() {
+void handleMainRoot()
+{
   struct tm timeinfo;
   char buf[32] = "";
-  if (getLocalTime(&timeinfo)) {
+  if (getLocalTime(&timeinfo)){
     strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
   }
 
@@ -470,84 +510,107 @@ void handleMainRoot() {
   mainServer.send(200, "text/html", html);
 }
 
-void handleDados() {
-    String json="{\"temperatura\":"+String(temperaturaAtual)+",\"umidade\":"+String(umidadeAtual)+"}";
-    mainServer.send(200,"application/json",json);
+void handleDados()
+{
+  String json = "{\"temperatura\":" + String(temperaturaAtual) + ",\"umidade\":" + String(umidadeAtual) + "}";
+  mainServer.send(200, "application/json", json);
 }
 
-//(Daniel)
-void handleIntervalos() {
+void handleIntervalos(){
   String json = "[";
-  for (int i = 0; i < 6; i++) {
-    float media = 0;
-    if (temperaturaContagemIntervalo[i] > 0) {
-      media = temperaturaSomaIntervalo[i] / temperaturaContagemIntervalo[i];
+  for (int i = 0; i < 6; i++)  {
+    if (temperaturaContagemIntervalo[i] > 0){
+      float media = temperaturaSomaIntervalo[i] / temperaturaContagemIntervalo[i];
+      json += String(media, 2);
     }
-    json += String(media, 2);
-    if (i < 5) json += ",";
+    else{
+      json += "null"; // sinaliza explicitamente "sem dados" no JSON
+    }
+
+    if (i < 5){
+      json += ",";
+    }
   }
   json += "]";
   mainServer.send(200, "application/json", json);
 }
-//
 
-void handleCadastrar() {
-    String p = mainServer.arg("produto");
-    mainServer.send(200,"text/html","<p>Produto cadastrado: "+p+"</p><a href='/'>Voltar</a>");
+void handleCadastrar()
+{
+  String p = mainServer.arg("produto");
+  mainServer.send(200, "text/html", "<p>Produto cadastrado: " + p + "</p><a href='/'>Voltar</a>");
 }
 
 // ------------------- Setup ------------------- //
-void setup() {
-    Serial.begin(115200);
+void setup()
+{
+  Serial.begin(115200);
 
-    dht.begin();
+  dht.begin();
 
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP("ESP32_Config","12345678");
-    Serial.println("AP iniciado, IP: "+WiFi.softAPIP().toString());
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("ESP32_Config", "12345678");
+  Serial.println("AP iniciado, IP: " + WiFi.softAPIP().toString());
 
-    portalServer.on("/",HTTP_GET,handlePortalRoot);
-    portalServer.on("/salvar",HTTP_POST,handleSalvar);
-    portalServer.on("/status",HTTP_GET,handleStatus);
-    portalServer.on("/finalize",HTTP_POST,handleFinalize);
-    portalServer.begin();
-    Serial.println("Portal rodando");
+  portalServer.on("/", HTTP_GET, handlePortalRoot);
+  portalServer.on("/salvar", HTTP_POST, handleSalvar);
+  portalServer.on("/status", HTTP_GET, handleStatus);
+  portalServer.on("/finalize", HTTP_POST, handleFinalize);
+  portalServer.begin();
+  Serial.println("Portal rodando");
 }
 
 // ------------------- Loop ------------------- //
-void loop() {
-    portalServer.handleClient();
-    medirSensor();
-
-    if(finalizeRequested && !mainServerStarted){
-        Serial.println("Finalizando AP e iniciando servidor principal...");
-        portalServer.stop();
-        WiFi.softAPdisconnect(true);
-        delay(300);
-
-      configTime(-3 * 3600, 0, "pool.ntp.org");
-      Serial.println("Aguardando sincronização...");
-      struct tm timeinfo;
-      while (!getLocalTime(&timeinfo)) {
-        delay(500);
-        Serial.print(".");
-      }
-      Serial.println("\nHora sincronizada!");
-
-        mainServer.on("/",HTTP_GET,handleMainRoot);
-        mainServer.on("/dados",HTTP_GET,handleDados);
-        mainServer.on("/cadastrar",HTTP_POST,handleCadastrar);
-        
-        //(Daniel)
-        mainServer.on("/intervalos", HTTP_GET, handleIntervalos);
-        //
-
-        mainServer.begin();
-        mainServerStarted=true;
-        finalizeRequested=false;
-        Serial.println("Servidor principal iniciado. IP: "+WiFi.localIP().toString());
+void loop(){
+  portalServer.handleClient();
+  // --- Reset diário robusto (executa independentemente das medições) ---
+  struct tm timeinfoLoop;
+  if (getLocalTime(&timeinfoLoop)){
+    if (ultimoDiaRegistrado == -1){
+      // primeiro boot: inicializa
+      ultimoDiaRegistrado = timeinfoLoop.tm_mday;
+    } else if (timeinfoLoop.tm_mday != ultimoDiaRegistrado){
+      // dia mudou -> reseta buffers
+      memset(temperaturaSomaIntervalo, 0, sizeof(temperaturaSomaIntervalo));
+      memset(temperaturaContagemIntervalo, 0, sizeof(temperaturaContagemIntervalo));
+      ultimoDiaRegistrado = timeinfoLoop.tm_mday;
+      Serial.println("Buffers de média resetados (mudança de dia).");
     }
+  }
 
-    if(mainServerStarted){ mainServer.handleClient();
+  medirSensor();
+
+  if (finalizeRequested && !mainServerStarted){
+    Serial.println("Finalizando AP e iniciando servidor principal...");
+    portalServer.stop();
+    WiFi.softAPdisconnect(true);
+    delay(300);
+
+    configTime(-3 * 3600, 0, "pool.ntp.org");
+    Serial.println("Aguardando sincronização...");
+    struct tm timeinfo;
+    while (!getLocalTime(&timeinfo))
+    {
+      delay(500);
+      Serial.print(".");
     }
+    Serial.println("\nHora sincronizada!");
+
+    mainServer.on("/", HTTP_GET, handleMainRoot);
+    mainServer.on("/dados", HTTP_GET, handleDados);
+    mainServer.on("/cadastrar", HTTP_POST, handleCadastrar);
+
+    //(Daniel)
+    mainServer.on("/intervalos", HTTP_GET, handleIntervalos);
+    //
+
+    mainServer.begin();
+    mainServerStarted = true;
+    finalizeRequested = false;
+    Serial.println("Servidor principal iniciado. IP: " + WiFi.localIP().toString());
+  }
+
+  if (mainServerStarted){
+    mainServer.handleClient();
+  }
 }
