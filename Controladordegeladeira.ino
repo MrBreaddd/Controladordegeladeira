@@ -31,35 +31,19 @@ String savedSSID, savedPass;
 
 // Controle de tempo para leituras do DHT
 unsigned long ultimaMedicao = 0;
-const unsigned long intervaloMedicao = 10000; // 5 segundos
+const unsigned long intervaloMedicao = 5000; // 5 segundos
 
-// ------------------- Funções -------------------
+// ------------------- Funções ------------------- //
 
 void enviarDados()
 {
   if (WiFi.status() == WL_CONNECTED){
     HTTPClient http;
 
-    // Obter hora atual do ESP32
-    struct tm timeinfo;
-    char buf[32] = "";
-    if (getLocalTime(&timeinfo)) {
-      strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
-    }
-
-    // Montar URL com todos os parâmetros corretamente concatenados
     String url = String(scriptUrl) +
                  "?temperatura=" + String(temperaturaAtual) +
-                 "&umidade=" + String(umidadeAtual) +
-                 "&acao=add" +
-                 "&dataHora=" + String(buf) +
-                 "&nome=ESP32" +
-                 "&categoria=Sensor" +
-                 "&quantidade=1";
+                 "&umidade=" + String(umidadeAtual);
 
-    Serial.println("Enviando para: " + url); // debug
-
-    // Iniciar requisição HTTP
     http.begin(url);
     int httpResponseCode = http.GET();
 
@@ -128,7 +112,7 @@ void medirSensor(){
   }
 }
 
-// ------------------- Páginas HTML -------------------
+// ------------------- Páginas HTML ------------------- //
 
 const char *paginaConfig = R"rawliteral(
 <!DOCTYPE html>
@@ -291,32 +275,27 @@ th{background:#28a745;color:#fff;}
 .gray { background: #bdc3c7;}
 </style>
 </head>
-
 <body>
-  <h1>Monitor</h1>
-  <div class='tab-buttons'>
-    <button id='btnCadastro' class='active' onclick="showTab('cadastro')">Cadastro</button>
-    <button id='btnDht' onclick="showTab('dht')">Medição DHT11</button>
-  </div>
+<h1>Monitor</h1>
+<div class='tab-buttons'>
+<button id='btnCadastro' class='active' onclick="showTab('cadastro')">Cadastro</button>
+<button id='btnDht' onclick="showTab('dht')">Medição DHT11</button>
+</div>
 
-  <div id='cadastro' class='tab' style='display:block;'>
-    <form id='form-alimento'>
-      <label>Nome do Alimento:</label>
-      <input type='text' id='nome' required>
-      <label>Categoria:</label>
-      <select id='categoria' required>
-        <option value=''>Selecione...</option>
-        <option>Fruta</option>
-        <option>Verdura</option>
-        <option>Legume</option>
-        <option>Carne</option>
-        <option>Bebida</option>
-        <option>Outro</option>
-      </select>
-      <label>Quantidade:</label>
-      <input type='number' id='quantidade' min='1' required>
-      <button type='submit'>Cadastrar</button>
-    </form>
+<div id='cadastro' class='tab' style='display:block;'>
+<form id='form-alimento'>
+<label>Nome do Alimento:</label>
+<input type='text' id='nome' required>
+<label>Categoria:</label>
+<select id='categoria' required>
+<option value=''>Selecione...</option>
+<option>Fruta</option><option>Verdura</option><option>Legume</option>
+<option>Carne</option><option>Bebida</option><option>Outro</option>
+</select>
+<label>Quantidade:</label>
+<input type='number' id='quantidade' min='1' required>
+<button type='submit'>Cadastrar</button>
+</form>
 
 <table id='tabela-alimentos'>
 <thead>
@@ -332,41 +311,31 @@ th{background:#28a745;color:#fff;}
 </table>
 </div>
 
-  <div id='dht' class='tab'>
-    <h2>Leituras do Sensor DHT11</h2>
-    <p>Temperatura: <span id='temperatura'>Carregando...</span></p>
-    <p>Umidade: <span id='umidade'>Carregando...</span></p>
-    <div id="monitoramento">
-      <h3>Monitoramento:</h3>
-      <span id="bolinhas">⚪ ⚪ ⚪ ⚪ ⚪ ⚪</span>
-    </div>
-  </div>
+<div id='dht' class='tab'>
+<h2>Leituras do Sensor DHT11</h2>
+<p>Temperatura: <span id='temperatura'>Carregando...</span></p>
+<p>Umidade: <span id='umidade'>Carregando...</span></p>
+</div>
 
 <script>
 // Valor coletado pelo ESP32 e substituido antes do envio
 let timestamp = Number(%BUF%);
 let buf = new Date(timestamp * 1000).toLocaleString("pt-BR"); 
 
-    // Controle das bolinhas progressivas
-    let progresso = 0;
-    const MAX_BOLINHAS = 6;
-    const TEMPERATURA_MIN = 18;
-    const TEMPERATURA_MAX = 25;
+function showTab(tab){
+  document.getElementById('cadastro').style.display=(tab==='cadastro')?'block':'none';
+  document.getElementById('dht').style.display=(tab==='dht')?'block':'none';
+  document.getElementById('btnCadastro').classList.toggle('active',tab==='cadastro');
+  document.getElementById('btnDht').classList.toggle('active',tab==='dht');
+}
 
-    function showTab(tab) {
-      document.getElementById('cadastro').style.display = (tab === 'cadastro') ? 'block' : 'none';
-      document.getElementById('dht').style.display = (tab === 'dht') ? 'block' : 'none';
-      document.getElementById('btnCadastro').classList.toggle('active', tab === 'cadastro');
-      document.getElementById('btnDht').classList.toggle('active', tab === 'dht');
-    }
-
-    const form = document.getElementById('form-alimento');
-    const tabela = document.querySelector('#tabela-alimentos tbody');
-    form.addEventListener('submit', e => {
-      e.preventDefault();
-      const nome = document.getElementById('nome').value.trim();
-      const categoria = document.getElementById('categoria').value;
-      const quantidade = document.getElementById('quantidade').value;
+const form=document.getElementById('form-alimento');
+const tabela=document.querySelector('#tabela-alimentos tbody');
+form.addEventListener('submit', e=>{
+  e.preventDefault();
+  const nome=document.getElementById('nome').value.trim();
+  const categoria=document.getElementById('categoria').value;
+  const quantidade=document.getElementById('quantidade').value;
 
   if(nome && categoria && quantidade){
     const linha=document.createElement('tr');
@@ -413,11 +382,11 @@ function carregarDadosGoogle() {
           <td>${item["quantidade"] || ""}</td>
           <td class="status-termico"></td>
         `;
-            tabela.appendChild(linha);
-          });
-        })
-        .catch(err => console.error("Erro ao carregar dados:", err));
-    }
+        tabela.appendChild(linha);
+      });
+    })
+    .catch(err => console.error("Erro ao carregar dados:", err));
+}
 
 // Chama a função ao iniciar
 window.addEventListener("load", () => {
