@@ -1,14 +1,11 @@
 const SPREADSHEET_ID = "1V8Qz7FqgkpIr-SAjjDTz3qL_Ud4ToNQ8YbqX2IgaFfY";
 const NOME_ABA = "Página1";
 
-
-//====================== ROTAS ========================
-
 function doGet(e) {
 
   // 1) recebimento de dados do ESP32
   if (e && e.parameter && e.parameter.nome) {
-    const dataHora   = e.parameter.dataHora   || "";
+    const timestamp  = e.parameter.timestamp  || ""; // <-- recebe unix timestamp
     const nome       = e.parameter.nome       || "";
     const categoria  = e.parameter.categoria  || "";
     const quantidade = e.parameter.quantidade || "";
@@ -19,7 +16,7 @@ function doGet(e) {
     const b5 = "⚫";
     const b6 = "⚫";
 
-    salvarRegistro(dataHora, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6);
+    salvarRegistro(timestamp, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6);
 
     return ContentService.createTextOutput("OK");
   }
@@ -32,7 +29,6 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // padrão se abrir o link direto
   return ContentService
     .createTextOutput("SCRIPT OK - GELADEIRA ONLINE");
 
@@ -44,29 +40,25 @@ function doGet(e) {
   }
 }
 
-//====================== BANCO / PLANILHA ========================
+//====================== BANCO ========================
 
-function salvarRegistro(dataHora, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6) {
+function salvarRegistro(timestamp, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6) {
   const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
   const aba = ss.getSheetByName(NOME_ABA);
 
-  // empilha sempre no final
-  aba.appendRow([dataHora, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6]);
+  aba.appendRow([timestamp, nome, categoria, quantidade, b1, b2, b3, b4, b5, b6]);
 }
-
 
 function listarDados() {
   const ss  = SpreadsheetApp.openById(SPREADSHEET_ID);
   const aba = ss.getSheetByName(NOME_ABA);
 
-  // pega todos os dados menos o cabeçalho
   const dados = aba.getDataRange().getValues();
-  const cab   = dados.shift(); // remove cabeçalho
+  dados.shift();
 
-  // montar objeto para json padrão da interface
   return dados.map(linha => {
     return {
-      dataHora:   linha[0],
+      timestamp:  linha[0], // <-- volta timestamp bruto pra interface
       nome:       linha[1],
       categoria:  linha[2],
       quantidade: linha[3]
@@ -79,10 +71,7 @@ function listarId() {
   const aba = ss.getSheetByName(NOME_ABA);
 
   const dados = aba.getDataRange().getValues();
-  dados.shift(); // remove cabeçalho
+  dados.shift();
 
-  // retorna vetor só com ids reais de cada linha
-  return dados.map((r, index) => {
-    return index + 2;
-  });
+  return dados.map((r, index) => index + 2);
 }
