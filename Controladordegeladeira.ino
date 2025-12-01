@@ -31,7 +31,7 @@ String savedSSID, savedPass;
 unsigned long ultimaMedicao = 0;
 const unsigned long intervaloMedicao = 10000; // 5 segundos
 
-// ------------------- Funções ------------------- //
+// ------------------- Funções -------------------
 
 void enviarDados() {
   if (WiFi.status() == WL_CONNECTED) {
@@ -109,34 +109,7 @@ void medirSensor() {
     }
 }
 
-void atualizarBolinhas() {
-  unsigned long agora = millis();
-  if (agora - ultimaAtualizacaoBolinhas < intervaloBolinhas) return;
-  ultimaAtualizacaoBolinhas = agora;
-
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  static int globalIndex = 0;
-  // incrementa índice ciclicamente 1..6
-  globalIndex = (globalIndex % 6) + 1;
-
-  String cor = (temperaturaAtual >= 18 && temperaturaAtual <= 25) ? "🟢" : "🔴";
-
-  String url = String(scriptUrl) +
-               "?acao=cycle&index=" + globalIndex +
-               "&temperatura=" + temperaturaAtual;
-
-  HTTPClient http;
-  http.begin(url);
-  int code = http.GET();
-  if (code > 0) {
-    Serial.printf("Bolinhas atualizadas: índice %d, cor %s\n", globalIndex, cor.c_str());
-  } else {
-    Serial.println("Erro ao atualizar bolinhas");
-  }
-  http.end();
-}
-// ------------------- Páginas HTML ------------------- //
+// ------------------- Páginas HTML -------------------
 
 const char* paginaConfig = R"rawliteral(
 <!DOCTYPE html>
@@ -449,36 +422,35 @@ String paginaPrincipalHTML = R"rawliteral(
         tabela.appendChild(linha);
         form.reset();
 
-        // ENVIA PARA O GOOGLE SHEETS
-        const dataHora = new Date().toISOString();
-        const url = "https://script.google.com/macros/s/AKfycbzcNfd605vVrF036-mczUy7_eIBdCfdRlcUhl-RrHRkOHq70A-fXYHwMVN2qbiRFqJX/exec" +
-          `?acao=add` +
-          `&dataHora=${encodeURIComponent(dataHora)}` +
-          `&nome=${encodeURIComponent(nome)}` +
-          `&categoria=${encodeURIComponent(categoria)}` +
-          `&quantidade=${encodeURIComponent(quantidade)}`;              
-        fetch(url)
-          .then(r => r.text())
-          .then(txt => console.log("Resposta do Google:", txt))
-          .catch(err => console.error("Erro ao enviar:", err));
-      }
-    });
+    // ENVIA PARA O GOOGLE SHEETS
+    const url = "https://script.google.com/macros/s/AKfycbxv79NLoQlrEipNvVJDHV9CDwgbW_phkzKWxYP_-6T2HgjR4IzCkkZPT8LYGYvoUpgE/exec" +
+      `?dataHora=${encodeURIComponent(buf)}` +
+      `&nome=${encodeURIComponent(nome)}` +
+      `&categoria=${encodeURIComponent(categoria)}` +
+      `&quantidade=${encodeURIComponent(quantidade)}` +
+      `&validade=`;
+    fetch(url)
+      .then(r => r.text())
+      .then(txt => console.log("Resposta do Google:", txt))
+      .catch(err => console.error("Erro ao enviar:", err));
+  }
+});
 
-    const scriptURL = "https://script.google.com/macros/s/AKfycbzcNfd605vVrF036-mczUy7_eIBdCfdRlcUhl-RrHRkOHq70A-fXYHwMVN2qbiRFqJX/exec";
+const scriptURL = "https://script.google.com/macros/s/SEU_SCRIPT_ID/exec";
 
-    function carregarDadosGoogle() {
-      fetch(scriptURL + "?acao=listar")
-        .then(response => response.json())
-        .then(dados => {
-          tabela.innerHTML = ""; // limpa tabela atual
-          dados.forEach(item => {
-            const linha = document.createElement("tr");
-            linha.innerHTML = `
-          <td>${item["dataHora"] || ""}</td>
-          <td>${item["nome"] || ""}</td>
-          <td>${item["categoria"] || ""}</td>
-          <td>${item["quantidade"] || ""}</td>
-          <td><div class="bolinhasLinha">⚪ ⚪ ⚪ ⚪ ⚪ ⚪</div></td>
+function carregarDadosGoogle() {
+  fetch(scriptURL + "?acao=listar")
+    .then(response => response.json())
+    .then(dados => {
+      const tabela = document.querySelector("#tabela-alimentos tbody");
+      tabela.innerHTML = ""; // limpa tabela atual
+
+      dados.forEach(item => {
+        const linha = document.createElement("tr");
+        linha.innerHTML = `
+          <td>${item["Nome"] || ""}</td>
+          <td>${item["Categoria"] || ""}</td>
+          <td>${item["Quantidade"] || ""}</td>
         `;
             tabela.appendChild(linha);
           });
@@ -582,7 +554,7 @@ void handleCadastrar() {
     mainServer.send(200,"text/html","<p>Produto cadastrado: "+p+"</p><a href='/'>Voltar</a>");
 }
 
-// ------------------- Setup ------------------- //
+// ------------------- Setup -------------------
 void setup() {
     Serial.begin(115200);
 
@@ -600,7 +572,7 @@ void setup() {
     Serial.println("Portal rodando");
 }
 
-// ------------------- Loop ------------------- //
+// ------------------- Loop -------------------
 void loop() {
     portalServer.handleClient();
     medirSensor();
