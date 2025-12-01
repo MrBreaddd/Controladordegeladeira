@@ -1,0 +1,20 @@
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const data = e.parameter;
+
+  const time = new Date();
+  const temp = parseFloat(data.temperatura) || "";
+  const umid = parseFloat(data.umidade) || "";
+
+  sheet.appendRow([time, temp, umid]);
+
+  return ContentService.createTextOutput("OK");
+}

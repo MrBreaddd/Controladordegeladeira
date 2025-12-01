@@ -1,0 +1,353 @@
+const char *paginaConfig = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Configurar WiFi</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #f3f4f6;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+  }
+
+  .container {
+    background-color: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 30px 40px;
+    text-align: center;
+    width: 90%;
+    max-width: 400px;
+  }
+
+  h1 {
+    font-size: 28px;
+    margin-bottom: 20px;
+    color: #333333;
+  }
+
+  label {
+    font-size: 20px;
+    display: block;
+    text-align: left;
+    margin-bottom: 8px;
+    color: #444444;
+  }
+
+  input[type="text"],
+  input[type="password"] {
+    font-size: 18px;
+    padding: 10px;
+    width: 100%;
+    border: 2px solid #ccc;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+  }
+
+  input[type="submit"] {
+    font-size: 20px;
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+
+  input[type="submit"]:hover {
+    background-color: #45a049;
+  }
+
+  p {
+    font-size: 18px;
+    margin-top: 20px;
+    color: #555555;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Configurar WiFi</h1>
+    <form action="/salvar" method="POST">
+      <label for="ssid">SSID:</label>
+      <input type="text" id="ssid" name="ssid" required>
+
+      <label for="senha">Senha:</label>
+      <input type="password" id="senha" name="senha">
+
+      <input type="submit" value="Conectar">
+    </form>
+    <p>Aguarde a verificação; a página mostrará quando conectado.</p>
+  </div>
+</body>
+</html>
+)rawliteral";
+
+String paginaConectando()
+{
+  return R"rawliteral(
+<!DOCTYPE html>
+<html><head><meta charset='utf-8'><title>Conectando...</title></head><body>
+<h1>Tentando conectar...</h1><p id='status'>Aguardando...</p>
+<script>
+function check(){
+fetch('/status').then(r=>r.json()).then(j=>{
+  if(j.connected){
+    document.getElementById('status').innerHTML='Conectado! IP:'+j.ip;
+    if(!document.getElementById('finalizarBtn')){
+      let btn=document.createElement('button');
+      btn.id='finalizarBtn';
+      btn.innerText='Desativar AP e abrir interface principal';
+      btn.onclick=function(){
+        fetch('/finalize',{method:'POST'}).then(()=>{
+          document.getElementById('status').innerHTML+='<br>Pedido enviado';
+          setTimeout(()=>{window.location='http://'+j.ip;},4000);
+        });
+      };
+      document.body.appendChild(btn);
+    }
+  }else document.getElementById('status').innerHTML='Ainda não conectado...';
+}).catch(e=>document.getElementById('status').innerHTML='Erro');}
+setInterval(check,1000); check();
+</script>
+</body></html>
+)rawliteral";
+}
+
+// Página principal (HTML completo com cadastro e DHT)
+String paginaPrincipalHTML = R"rawliteral(
+<!DOCTYPE html>
+<html lang='pt-BR'>
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>ESP32 - Cadastro e DHT11</title>
+<style>
+body{font-family:Arial;background:#f0f2f5;margin:0;padding:20px;}
+h1{text-align:center;color:#333;}
+.tab-buttons{text-align:center;margin-bottom:20px;}
+.tab-buttons button{padding:10px 20px;margin:5px;border:none;border-radius:5px;
+background:#28a745;color:#fff;font-weight:bold;cursor:pointer;}
+.tab-buttons button.active{background:#218838;}
+.tab{display:none;max-width:700px;background:#fff;padding:20px;margin:0 auto;
+border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,0.1);}
+label{font-weight:bold;display:block;margin-top:10px;}
+input,select,button[type=submit]{width:100%;padding:8px;margin-top:5px;
+border:1px solid #ccc;border-radius:5px;}
+button[type=submit]{background:#28a745;color:#fff;font-weight:bold;cursor:pointer;}
+button[type=submit]:hover{background:#218838;}
+table{width:100%;border-collapse:collapse;margin-top:20px;}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #ccc;}
+th{background:#28a745;color:#fff;}
+.circle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  margin: 2px;
+}
+.green { background: #2ecc71; }
+.yellow { background: #f1c40f; }
+.red { background: #e74c3c; }
+.gray { background: #bdc3c7;}
+</style>
+</head>
+<body>
+<h1>Monitor</h1>
+<div class='tab-buttons'>
+<button id='btnCadastro' class='active' onclick="showTab('cadastro')">Cadastro</button>
+<button id='btnDht' onclick="showTab('dht')">Medição DHT11</button>
+</div>
+
+<div id='cadastro' class='tab' style='display:block;'>
+<form id='form-alimento'>
+<label>Nome do Alimento:</label>
+<input type='text' id='nome' required>
+<label>Categoria:</label>
+<select id='categoria' required>
+<option value=''>Selecione...</option>
+<option>Fruta</option><option>Verdura</option><option>Legume</option>
+<option>Carne</option><option>Bebida</option><option>Outro</option>
+</select>
+<label>Quantidade:</label>
+<input type='number' id='quantidade' min='1' required>
+<button type='submit'>Cadastrar</button>
+</form>
+
+<table id='tabela-alimentos'>
+<thead>
+<tr>
+<th>Data e Hora</th>
+<th>Nome</th>
+<th>Categoria</th>
+<th>Quantidade</th>
+<th>Status Térmico</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+
+<div id='dht' class='tab'>
+<h2>Leituras do Sensor DHT11</h2>
+<p>Temperatura: <span id='temperatura'>Carregando...</span></p>
+<p>Umidade: <span id='umidade'>Carregando...</span></p>
+</div>
+
+<script>
+// Valor coletado pelo ESP32 e substituido antes do envio
+let timestamp = Number(%BUF%);
+let buf = new Date(timestamp * 1000).toLocaleString("pt-BR"); 
+
+function showTab(tab){
+  document.getElementById('cadastro').style.display=(tab==='cadastro')?'block':'none';
+  document.getElementById('dht').style.display=(tab==='dht')?'block':'none';
+  document.getElementById('btnCadastro').classList.toggle('active',tab==='cadastro');
+  document.getElementById('btnDht').classList.toggle('active',tab==='dht');
+}
+
+const form=document.getElementById('form-alimento');
+const tabela=document.querySelector('#tabela-alimentos tbody');
+form.addEventListener('submit', e=>{
+  e.preventDefault();
+  const nome=document.getElementById('nome').value.trim();
+  const categoria=document.getElementById('categoria').value;
+  const quantidade=document.getElementById('quantidade').value;
+
+  if(nome && categoria && quantidade){
+    const linha=document.createElement('tr');
+    linha.innerHTML=`
+      <td>${buf}</td>
+      <td>${nome}</td>
+      <td>${categoria}</td>
+      <td>${quantidade}</td>
+      <td class="status-termico"></td>`;
+    tabela.appendChild(linha);
+    form.reset();
+
+    // ENVIA PARA O GOOGLE SHEETS
+    const url = "https://script.google.com/macros/s/AKfycbzgZ5aXzNODIQAeN2m4mBY8730AamtX8PkNbDSJuhEkgEkV5OcKDUcuA3hIJZHhrTyW/exec" +
+      `?timestamp=${encodeURIComponent(timestamp)}` +
+      `&nome=${encodeURIComponent(nome)}` +
+      `&categoria=${encodeURIComponent(categoria)}` +
+      `&quantidade=${encodeURIComponent(quantidade)}`;
+    fetch(url)
+      .then(r => r.text())
+      .then(txt => console.log("Resposta do Google:", txt))
+      .catch(err => console.error("Erro ao enviar:", err));
+  }
+});
+
+const scriptURL = "https://script.google.com/macros/s/AKfycbzgZ5aXzNODIQAeN2m4mBY8730AamtX8PkNbDSJuhEkgEkV5OcKDUcuA3hIJZHhrTyW/exec";
+
+function carregarDadosGoogle() {
+  fetch(scriptURL + "?acao=listar")
+    .then(response => response.json())
+    .then(dados => {
+      const tabela = document.querySelector("#tabela-alimentos tbody");
+      tabela.innerHTML = ""; // limpa tabela atual
+
+      dados.forEach(item => {
+        const linha = document.createElement("tr");
+        const ts = Number(item["timestamp"]);
+        const dataLocal = new Date(ts * 1000).toLocaleString("pt-BR");    
+
+        linha.innerHTML = `
+          <td>${dataLocal}</td>
+          <td>${item["nome"] || ""}</td>
+          <td>${item["categoria"] || ""}</td>
+          <td>${item["quantidade"] || ""}</td>
+          <td class="status-termico"></td>
+        `;
+        tabela.appendChild(linha);
+      });
+    })
+    .catch(err => console.error("Erro ao carregar dados:", err));
+}
+
+// Chama a função ao iniciar
+window.addEventListener("load", () => {
+    carregarDadosGoogle();
+    setTimeout(atualizarStatusTermico, 1500);
+});
+
+function atualizarDados(){
+  fetch('/dados').then(r=>r.json()).then(data=>{
+    document.getElementById('temperatura').innerHTML=data.temperatura+' &#8451;';
+    document.getElementById('umidade').innerHTML=data.umidade+' %';
+  });
+}
+setInterval(atualizarDados,5000);
+atualizarDados();
+async function atualizarStatusTermico(){
+  const resp = await fetch('/intervalos');
+  const medias = await resp.json();
+
+  const linhas = document.querySelectorAll("#tabela-alimentos tbody tr");
+
+  const agora = new Date();
+  const periodoAgora = Math.floor(agora.getHours() / 4); // período real do momento
+
+  linhas.forEach(linha => {
+    const dataHora = linha.children[0].innerText;
+    const cel = linha.querySelector(".status-termico");
+    if(!cel || !dataHora) return;
+    // conversor robusto DD/MM/YYYY para Date
+    function parseData(dataString){
+        const partes = dataString.split(/[/ :]/); 
+        if (partes.length >= 5){
+            const [dia, mes, ano, hora, min, seg] = partes;
+            return new Date(`${ano}-${mes}-${dia}T${hora}:${min}:${seg || "00"}`);
+        }
+        return new Date(dataString);
+    }
+    const cadastro = parseData(dataHora);
+    const periodoCadastro = Math.floor(cadastro.getHours() / 4);
+    cel.innerHTML = "";
+    
+    for (let i = 0; i < 6; i++) {
+
+      let classe = "gray";
+
+        // período antes do cadastro -> sem histórico
+      if (i < periodoCadastro) {
+        classe = "gray";
+
+        // futuro do dia ainda não chegou
+      } else if (i > periodoAgora) {
+        classe = "gray";
+
+        // período atual ou passado -> verifica se há média
+      } else {
+          // medias[i] pode ser null (sem dados) — se for, mantemos gray
+          const m = medias[i];
+
+          if (m === null || m === undefined) {
+            classe = "gray";
+          } else {
+              const media = Number(m); // já é número, mas garantimos
+              if (media < 4) classe = "green";
+              else if (media <= 4.5) classe = "yellow";
+              else classe = "red";
+          }
+      }      
+      cel.innerHTML += `<span class="circle ${classe}"></span>`;
+    }
+  });
+}
+
+setInterval(atualizarStatusTermico, 10000);
+window.addEventListener("load", () => {
+    setTimeout(atualizarStatusTermico, 1500);
+});
+</script>
+</body>
+</html>
+)rawliteral";
